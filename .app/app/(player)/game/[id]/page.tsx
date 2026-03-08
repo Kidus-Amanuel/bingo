@@ -14,11 +14,12 @@ import {
     Hash,
     PlayCircle
 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
 import { cn } from "@/lib/utils";
 
-export default function GamePage({ params }: { params: { id: string } }) {
+function GameContent() {
+    const params = useParams<{ id: string }>();
     const { currentGame, leaveGame, balance, userId, setCurrentGame } = useGameStore();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -33,10 +34,11 @@ export default function GamePage({ params }: { params: { id: string } }) {
         if (currentGame) return;
 
         const uid = userId || searchParams.get('userId');
-        if (!uid) return;
+        const gameId = params?.id;
+        if (!uid || !gameId) return;
 
         setIsLoadingGame(true);
-        fetch(`/api/game/state?userId=${uid}&gameId=${params.id}`)
+        fetch(`/api/game/state?userId=${uid}&gameId=${gameId}`)
             .then(r => r.json())
             .then(data => {
                 if (data.game) {
@@ -56,8 +58,9 @@ export default function GamePage({ params }: { params: { id: string } }) {
                     });
                 }
             })
+            .catch(err => console.error("Error fetching game state:", err))
             .finally(() => setIsLoadingGame(false));
-    }, [currentGame, params.id, userId, searchParams, setCurrentGame]);
+    }, [currentGame, params?.id, userId, searchParams, setCurrentGame]);
 
     // Simulation of drawing numbers
     useEffect(() => {
@@ -290,5 +293,18 @@ export default function GamePage({ params }: { params: { id: string } }) {
                 <p className="text-[7px] font-black uppercase tracking-[0.5em] text-slate-500">kiik Game Engine</p>
             </footer>
         </div>
+    );
+}
+
+export default function GamePage() {
+    return (
+        <Suspense fallback={
+            <div className="h-screen flex items-center justify-center p-4 text-center space-y-4 flex-col bg-slate-50">
+                <Loader2 className="w-10 h-10 animate-spin text-primary-600" />
+                <p className="font-bold text-slate-500">Loading game...</p>
+            </div>
+        }>
+            <GameContent />
+        </Suspense>
     );
 }
