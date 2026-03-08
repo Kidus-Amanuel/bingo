@@ -6,8 +6,14 @@ interface CurrentGame extends Game {
     selectedCard: BingoCard | null;
 }
 
+interface UserProfile {
+    username: string;
+    avatarUrl: string | null;
+}
+
 interface GameStore {
     userId: string | null;
+    profile: UserProfile | null;
     balance: number;
     games: Game[];
     templates: BingoCard[];
@@ -29,6 +35,7 @@ interface GameStore {
 
 export const useGameStore = create<GameStore>((set, get) => ({
     userId: null,
+    profile: null,
     balance: 0,
     games: [],
     templates: [],
@@ -41,13 +48,28 @@ export const useGameStore = create<GameStore>((set, get) => ({
     initSession: async (userId: string) => {
         set({ userId });
 
-        // Fetch real balance from Supabase
-        const { data: wallet } = await supabase
-            .from('wallets')
-            .select('balance')
-            .eq('user_id', userId)
-            .single();
+        // Fetch profile + wallet in parallel
+        const [{ data: profileData }, { data: wallet }] = await Promise.all([
+            supabase
+                .from('profiles')
+                .select('username, avatar_url')
+                .eq('id', userId)
+                .single(),
+            supabase
+                .from('wallets')
+                .select('balance')
+                .eq('user_id', userId)
+                .single()
+        ]);
 
+        if (profileData) {
+            set({
+                profile: {
+                    username: profileData.username || 'Player',
+                    avatarUrl: profileData.avatar_url || null
+                }
+            });
+        }
         if (wallet) {
             set({ balance: Number(wallet.balance) });
         }

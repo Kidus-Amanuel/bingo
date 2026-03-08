@@ -3,7 +3,6 @@
 import { useGameStore } from "@/stores/useGameStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Wallet, ChevronLeft } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 interface LobbyHeaderProps {
     showBack?: boolean;
@@ -11,7 +10,11 @@ interface LobbyHeaderProps {
 }
 
 export function LobbyHeader({ showBack, onBack }: LobbyHeaderProps) {
-    const { balance } = useGameStore();
+    const { balance, profile } = useGameStore();
+
+    const initials = profile?.username
+        ? profile.username.slice(0, 2).toUpperCase()
+        : "??";
 
     return (
         <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 h-16 flex items-center justify-between shadow-sm">
@@ -27,10 +30,14 @@ export function LobbyHeader({ showBack, onBack }: LobbyHeaderProps) {
                 )}
                 <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9 border-2 border-primary-100">
-                        <AvatarImage src="/avatar-placeholder.png" alt="Player" />
-                        <AvatarFallback className="bg-primary-50 text-primary-600 font-bold">JD</AvatarFallback>
+                        <AvatarImage src={profile?.avatarUrl ?? ""} alt={profile?.username ?? "Player"} />
+                        <AvatarFallback className="bg-primary-50 text-primary-600 font-bold text-xs">
+                            {initials}
+                        </AvatarFallback>
                     </Avatar>
-                    <span className="font-black text-primary-900 tracking-tight hidden sm:block uppercase">Bingo</span>
+                    <span className="font-black text-primary-900 tracking-tight hidden sm:block uppercase">
+                        {profile?.username ?? "Bingo"}
+                    </span>
                 </div>
             </div>
 
