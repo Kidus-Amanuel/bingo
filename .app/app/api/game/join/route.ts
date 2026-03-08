@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
 import { generateBingoCard, calculateGridHash } from '@/lib/gameEngine';
 
 export async function POST(req: Request) {
@@ -11,7 +11,7 @@ export async function POST(req: Request) {
         }
 
         // 1. Check if game exists and get bet amount
-        const { data: game, error: gameError } = await supabase
+        const { data: game, error: gameError } = await supabaseAdmin
             .from('games')
             .select('status, bet_amount')
             .eq('id', gameId)
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
         }
 
         // 2. Check user balance
-        const { data: wallet, error: walletError } = await supabase
+        const { data: wallet, error: walletError } = await supabaseAdmin
             .from('wallets')
             .select('balance')
             .eq('user_id', userId)
@@ -41,7 +41,7 @@ export async function POST(req: Request) {
         }
 
         // 3. Check if player is already in the game
-        const { data: existingPlayer, error: playerCheckError } = await supabase
+        const { data: existingPlayer, error: playerCheckError } = await supabaseAdmin
             .from('game_players')
             .select('user_id')
             .eq('game_id', gameId)
@@ -57,7 +57,7 @@ export async function POST(req: Request) {
         const gridHash = calculateGridHash(grid);
 
         // 5. Deduct Balance (Ideally this should be in a transaction/RPC)
-        const { error: deductError } = await supabase
+        const { error: deductError } = await supabaseAdmin
             .from('wallets')
             .update({ balance: wallet.balance - game.bet_amount })
             .eq('user_id', userId);
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
         }
 
         // 6. Log Transaction
-        await supabase.from('transactions').insert({
+        await supabaseAdmin.from('transactions').insert({
             user_id: userId,
             amount: -game.bet_amount,
             type: 'bet',
@@ -76,7 +76,7 @@ export async function POST(req: Request) {
         });
 
         // 7. Save Card
-        const { data: card, error: cardError } = await supabase
+        const { data: card, error: cardError } = await supabaseAdmin
             .from('cards')
             .insert({
                 user_id: userId,
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
         }
 
         // 5. Join Game
-        const { error: joinError } = await supabase
+        const { error: joinError } = await supabaseAdmin
             .from('game_players')
             .insert({
                 game_id: gameId,

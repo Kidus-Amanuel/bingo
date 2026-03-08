@@ -26,8 +26,14 @@ export async function POST(req: Request) {
         const telegramId = update.message.from.id;
         const username = update.message.from.username || update.message.from.first_name;
 
+        if (!supabaseAdmin) {
+            console.error('Bot Error: supabaseAdmin is not initialized (missing service role key)');
+            await sendMessage(chatId, "⚠️ The bot is currently in maintenance mode (Configuration Error).");
+            return NextResponse.json({ ok: true });
+        }
+
         // 1. Find or create user profile
-        let { data: profile, error: profileError } = await supabase
+        let { data: profile, error: profileError } = await supabaseAdmin
             .from('profiles')
             .select('id, role')
             .eq('telegram_id', telegramId)
@@ -77,7 +83,7 @@ export async function POST(req: Request) {
             await sendMessage(chatId, "🎮 Welcome to the Bingo Pro Bot!\n\nCommands:\n/play - Join an active game\n/balance - Check your current balance\n/help - Show this message");
         }
         else if (text === '/balance') {
-            const { data: wallet } = await supabase
+            const { data: wallet } = await supabaseAdmin
                 .from('wallets')
                 .select('balance')
                 .eq('user_id', profile.id)
@@ -87,7 +93,7 @@ export async function POST(req: Request) {
         }
         else if (text === '/play') {
             // Find an active/waiting game
-            const { data: game } = await supabase
+            const { data: game } = await supabaseAdmin
                 .from('games')
                 .select('id, bet_amount')
                 .eq('status', 'waiting')
@@ -101,7 +107,7 @@ export async function POST(req: Request) {
             }
         }
         else if (text === '/join') {
-            const { data: game } = await supabase
+            const { data: game } = await supabaseAdmin
                 .from('games')
                 .select('id, bet_amount, status')
                 .eq('status', 'waiting')
@@ -115,7 +121,7 @@ export async function POST(req: Request) {
 
             // Call the join session (we can do this by making an internal request or using the logic directly)
             // For simplicity and to ensure the logic is identical, we'll implement it here using a similar pattern.
-            const { data: wallet } = await supabase.from('wallets').select('balance').eq('user_id', profile.id).single();
+            const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
 
             if (!wallet || wallet.balance < game.bet_amount) {
                 await sendMessage(chatId, `🚫 Insufficient balance. You need ${game.bet_amount} Birr, but have ${wallet?.balance || 0} Birr.`);
@@ -123,7 +129,7 @@ export async function POST(req: Request) {
             }
 
             // Check if already in
-            const { data: existing } = await supabase.from('game_players').select('user_id').eq('game_id', game.id).eq('user_id', profile.id).maybeSingle();
+            const { data: existing } = await supabaseAdmin.from('game_players').select('user_id').eq('game_id', game.id).eq('user_id', profile.id).maybeSingle();
             if (existing) {
                 await sendMessage(chatId, "✅ You are already in this game! Wait for the draw.");
                 return NextResponse.json({ ok: true });
