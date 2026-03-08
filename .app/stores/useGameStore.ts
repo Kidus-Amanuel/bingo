@@ -31,6 +31,7 @@ interface GameStore {
     selectCard: (cardId: string | null) => void;
     joinGame: (gameId: string, cardId?: string | null) => Promise<boolean>;
     leaveGame: () => void;
+    setCurrentGame: (game: CurrentGame | null) => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -173,4 +174,5 @@ export const useGameStore = create<GameStore>((set, get) => ({
     },
 
     leaveGame: () => set({ currentGame: null }),
+    setCurrentGame: (game) => set({ currentGame: game }),
 }));

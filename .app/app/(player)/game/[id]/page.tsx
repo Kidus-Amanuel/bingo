@@ -14,24 +14,50 @@ import {
     Hash,
     PlayCircle
 } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export default function GamePage({ params }: { params: { id: string } }) {
-    const { currentGame, joinGame, leaveGame, balance } = useGameStore();
+    const { currentGame, leaveGame, balance, userId, setCurrentGame } = useGameStore();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const [calledNumbers, setCalledNumbers] = useState<number[]>([]);
     const [isWinnerPopupOpen, setIsWinnerPopupOpen] = useState(false);
     const [winnerDetails, setWinnerDetails] = useState<{ isMe: boolean; name?: string } | null>(null);
     const [isValidating, setIsValidating] = useState(false);
+    const [isLoadingGame, setIsLoadingGame] = useState(false);
 
-    // Auto-initialize if missing (e.g. refresh)
+    // Self-initialize game state from server if currentGame is missing (e.g. direct nav / refresh)
     useEffect(() => {
-        if (!currentGame && params.id) {
-            joinGame(params.id, null); // Join as spectator
-        }
-    }, [currentGame, params.id, joinGame]);
+        if (currentGame) return;
+
+        const uid = userId || searchParams.get('userId');
+        if (!uid) return;
+
+        setIsLoadingGame(true);
+        fetch(`/api/game/state?userId=${uid}&gameId=${params.id}`)
+            .then(r => r.json())
+            .then(data => {
+                if (data.game) {
+                    setCurrentGame({
+                        gameId: data.game.id,
+                        gameNumber: 1,
+                        betAmount: Number(data.game.bet_amount),
+                        playersCount: 0,
+                        maxPlayers: 100,
+                        totalPot: Number(data.game.total_pot),
+                        status: data.game.status,
+                        range: '1-75',
+                        availableCards: [],
+                        selectedCard: data.cardId
+                            ? { id: data.cardId, numbers: data.grid }
+                            : null
+                    });
+                }
+            })
+            .finally(() => setIsLoadingGame(false));
+    }, [currentGame, params.id, userId, searchParams, setCurrentGame]);
 
     // Simulation of drawing numbers
     useEffect(() => {
