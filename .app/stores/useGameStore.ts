@@ -1,13 +1,13 @@
 import { create } from 'zustand';
 import { Game, BingoCard } from '@/app/types/game';
-import gamesData from '@/mockup/game.json';
-import usersData from '@/mockup/users.json';
+import { supabase } from '@/lib/supabase';
 
 interface CurrentGame extends Game {
     selectedCard: BingoCard | null;
 }
 
 interface GameStore {
+    userId: string | null;
     balance: number;
     games: Game[];
     selectedGame: Game | null;
@@ -17,6 +17,7 @@ interface GameStore {
     history: any[];
 
     // Actions
+    initSession: (userId: string) => Promise<void>;
     fetchGames: () => Promise<void>;
     setBalance: (amount: number) => void;
     selectGame: (gameId: string | null) => void;
@@ -26,7 +27,8 @@ interface GameStore {
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
-    balance: usersData.user.balance,
+    userId: null,
+    balance: 0,
     games: [],
     selectedGame: null,
     selectedCard: null,
@@ -34,18 +36,54 @@ export const useGameStore = create<GameStore>((set, get) => ({
     currentGame: null,
     history: [],
 
-    fetchGames: async () => {
-        // Simulate API fetch delay
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        set({ games: gamesData.games as Game[] });
+    initSession: async (userId: string) => {
+        set({ userId });
+
+        // Fetch real balance from Supabase
+        const { data: wallet } = await supabase
+            .from('wallets')
+            .select('balance')
+            .eq('user_id', userId)
+            .single();
+
+        if (wallet) {
+            set({ balance: Number(wallet.balance) });
+        }
     },
 
-    fetchGameById: async (gameId: string) => {
-        // Implementation for deep link or direct access
-        if (get().games.length === 0) {
-            await get().fetchGames();
+    fetchGames: async () => {
+        // Fetch active/waiting games from Supabase
+        const { data: gamesData, error } = await supabase
+            .from('games')
+            .select(`
+                id,
+                bet_amount,
+                status,
+                room_id,
+                total_pot,
+                created_at
+            `)
+            .in('status', ['waiting', 'started'])
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error('Error fetching games:', error);
+            return;
         }
-        return get().games.find(g => g.gameId === gameId);
+
+        const formattedGames: Game[] = (gamesData || []).map((g, index) => ({
+            gameNumber: index + 1,
+            gameId: g.id,
+            betAmount: Number(g.bet_amount),
+            playersCount: 0, // In a real app, query game_players count
+            maxPlayers: 100,
+            totalPot: Number(g.total_pot),
+            status: g.status as any,
+            range: "1-75",
+            availableCards: [] // Cards should be fetched per game or globally
+        }));
+
+        set({ games: formattedGames });
     },
 
     setBalance: (amount) => set({ balance: amount }),
@@ -69,37 +107,43 @@ export const useGameStore = create<GameStore>((set, get) => ({
     },
 
     joinGame: async (gameId: string, cardId?: string | null) => {
-        const { balance, games } = get();
-        const game = games.find((g: Game) => g.gameId === gameId);
+        const { userId, balance, games } = get();
+        if (!userId) return false;
 
+        const game = games.find((g: Game) => g.gameId === gameId);
         if (!game) return false;
 
-        // If playing (has cardId), check balance
-        if (cardId && balance < game.betAmount) {
-            return false;
-        }
+        if (cardId && balance < game.betAmount) return false;
 
         set({ isJoining: true });
 
-        // Simulate API call
-        await new Promise((resolve) => setTimeout(resolve, 1200));
+        try {
+            const res = await fetch('/api/game/join', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ gameId, userId })
+            });
+            const data = await res.json();
 
-        const selectedCard = cardId
-            ? (game.availableCards.find((c: BingoCard) => c.id === cardId) || null)
-            : null;
+            if (data.success) {
+                set((state) => ({
+                    balance: state.balance - game.betAmount,
+                    isJoining: false,
+                    currentGame: {
+                        ...game,
+                        selectedCard: { id: data.cardId, numbers: data.grid }
+                    },
+                    selectedGame: null,
+                    selectedCard: null
+                }));
+                return true;
+            }
+        } catch (err) {
+            console.error('Join Error:', err);
+        }
 
-        set((state) => ({
-            balance: cardId ? state.balance - game.betAmount : state.balance,
-            isJoining: false,
-            currentGame: {
-                ...game,
-                selectedCard: selectedCard
-            },
-            selectedGame: null,
-            selectedCard: null
-        }));
-
-        return true;
+        set({ isJoining: false });
+        return false;
     },
 
     leaveGame: () => set({ currentGame: null }),

@@ -1,7 +1,7 @@
 "use client"
 
-import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { LobbyHeader } from "@/components/player/LobbyHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,7 +17,10 @@ import {
     DialogTitle,
 } from "@/components/ui/dialog";
 
-export default function LobbyPage() {
+function LobbyContent() {
+    const searchParams = useSearchParams();
+    const userId = searchParams.get("userId");
+
     const {
         games,
         fetchGames,
@@ -26,16 +29,24 @@ export default function LobbyPage() {
         isJoining,
         joinGame,
         selectedCard,
-        selectCard
+        selectCard,
+        initSession
     } = useGameStore();
+
     const router = useRouter();
     const [error, setError] = useState<string | null>(null);
     const [localGames, setLocalGames] = useState<Game[]>([]);
     const [previewOpen, setPreviewOpen] = useState(false);
 
     useEffect(() => {
-        fetchGames();
-    }, [fetchGames]);
+        if (userId) {
+            initSession(userId).then(() => {
+                fetchGames();
+            });
+        } else {
+            fetchGames();
+        }
+    }, [userId, initSession, fetchGames]);
 
     // Update local games and auto-expand first game
     useEffect(() => {
@@ -77,10 +88,6 @@ export default function LobbyPage() {
         if (success) {
             router.push(`/game/${gameId}`);
         } else {
-            // If join failed (e.g. balance), we still navigate as spectator
-            // but joinGame already handled setting state if success was false due to balance
-            // However, our joinGame returns false for balance. 
-            // Let's ensure we navigate anyway.
             router.push(`/game/${gameId}`);
         }
     };
@@ -90,7 +97,6 @@ export default function LobbyPage() {
         setPreviewOpen(true);
     };
 
-    // Helper to transpose the grid (Column-based mock data to Row-based UI)
     const getTransposedNumbers = (numbers: (number | "FREE")[][]) => {
         const transposed = [[], [], [], [], []] as (number | "FREE")[][];
         for (let r = 0; r < 5; r++) {
@@ -167,7 +173,6 @@ export default function LobbyPage() {
                 )}
             </main>
 
-            {/* Sticky Floating Countdown Bar */}
             {selectedGame && currentGameData && (
                 <div className="fixed bottom-6 left-4 right-4 z-50 animate-in slide-in-from-bottom-10 duration-500">
                     <div className="bg-primary-900 rounded-2xl p-4 flex items-center justify-between shadow-2xl shadow-primary-900/40 border border-white/10 backdrop-blur-md bg-opacity-95">
@@ -194,7 +199,6 @@ export default function LobbyPage() {
                 </div>
             )}
 
-            {/* Card Preview Modal */}
             <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
                 <DialogContent className="sm:max-w-md p-5 rounded-[2.5rem] border-none shadow-2xl bg-white overflow-hidden max-w-[92vw]">
                     <DialogHeader className="pb-3 text-center">
@@ -204,7 +208,6 @@ export default function LobbyPage() {
                     {selectedCard && (
                         <div className="space-y-5">
                             <div className="bg-slate-50 p-3 rounded-[2rem] border border-slate-100">
-                                {/* BINGO Headers */}
                                 <div className="grid grid-cols-5 gap-1.5 mb-2">
                                     {['B', 'I', 'N', 'G', 'O'].map(letter => (
                                         <div key={letter} className="text-center font-black text-primary-600 text-sm tracking-[0.2em] py-1 drop-shadow-sm">
@@ -213,7 +216,6 @@ export default function LobbyPage() {
                                     ))}
                                 </div>
 
-                                {/* Transposed Grid (Rows from Mock Columns) */}
                                 <div className="grid grid-cols-5 gap-1.5 aspect-square w-full">
                                     {getTransposedNumbers(selectedCard.numbers).map((row, rIdx) =>
                                         row.map((num, cIdx) => (
@@ -314,5 +316,17 @@ function GameListItem({ game, isSelected, onClick }: { game: Game; isSelected: b
                 </div>
             </div>
         </Card>
+    );
+}
+
+export default function LobbyPage() {
+    return (
+        <Suspense fallback={
+            <div className="min-h-screen flex items-center justify-center">
+                <Loader2 className="w-12 h-12 text-primary-600 animate-spin" />
+            </div>
+        }>
+            <LobbyContent />
+        </Suspense>
     );
 }

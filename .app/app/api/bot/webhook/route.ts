@@ -5,11 +5,15 @@ import { v4 as uuidv4 } from 'uuid';
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
 
-async function sendMessage(chatId: number, text: string) {
+async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
     await fetch(`${TELEGRAM_API}/sendMessage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chat_id: chatId, text })
+        body: JSON.stringify({
+            chat_id: chatId,
+            text,
+            reply_markup: replyMarkup
+        })
     });
 }
 
@@ -169,9 +173,14 @@ export async function POST(req: Request) {
             const joinData = await joinRes.json();
 
             if (joinData.success) {
-                await sendMessage(chatId, "🎟️ Successfully joined! Here is your card:\n\n" +
-                    joinData.grid.map((row: any) => row.join(' | ')).join('\n') +
-                    "\n\n👉 Good luck! You'll be notified once the draw begins."
+                await sendMessage(
+                    chatId,
+                    "🎟️ Successfully joined! Tap the button below to open your card and watch the draw live:",
+                    {
+                        inline_keyboard: [[
+                            { text: "Play Now 🎮", url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` }
+                        ]]
+                    }
                 );
             } else {
                 await sendMessage(chatId, "❌ Registration failed: " + joinData.error);
