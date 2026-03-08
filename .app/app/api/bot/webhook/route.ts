@@ -151,7 +151,15 @@ export async function POST(req: Request) {
             // 3. Check for existing join (prevent double-betting on the same game)
             const { data: existing } = await supabaseAdmin.from('game_players').select('user_id').eq('game_id', game.id).eq('user_id', profile.id).maybeSingle();
             if (existing) {
-                await sendMessage(chatId, "✅ You are already in the queue for this game! Please wait for the operator to start the draw.");
+                await sendMessage(
+                    chatId,
+                    "✅ You are already in the queue for this game! Tap the button below to open your card and watch the draw live:",
+                    {
+                        inline_keyboard: [[
+                            { text: "Play Now 🎮", url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` }
+                        ]]
+                    }
+                );
                 return NextResponse.json({ ok: true });
             }
 
