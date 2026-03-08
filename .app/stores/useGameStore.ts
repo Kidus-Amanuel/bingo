@@ -68,11 +68,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
             .in('status', ['waiting', 'started'])
             .order('created_at', { ascending: false });
 
-        // Fetch card templates
+        // Fetch card templates (10 lucky numbers to pick from)
         const { data: templatesData, error: templatesError } = await supabase
             .from('card_templates')
             .select('*')
-            .limit(20);
+            .limit(50);
 
         if (gamesError || templatesError) {
             console.error('Error fetching games/templates:', gamesError || templatesError);

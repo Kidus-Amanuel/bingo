@@ -85,13 +85,9 @@ function LobbyContent() {
 
     const handleAutoJoin = async (gameId: string) => {
         setPreviewOpen(false);
-        const success = await joinGame(gameId, selectedCard?.id);
-
-        if (success) {
-            router.push(`/game/${gameId}`);
-        } else {
-            router.push(`/game/${gameId}`);
-        }
+        // Always navigate to game — user may already be joined via bot
+        await joinGame(gameId, selectedCard?.id);
+        router.push(`/game/${gameId}`);
     };
 
     const handleSelectNumber = (cardId: string) => {
