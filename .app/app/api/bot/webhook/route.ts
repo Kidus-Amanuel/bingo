@@ -80,7 +80,7 @@ export async function POST(req: Request) {
 
         // 2. Command Handlers
         if (text === '/start') {
-            await sendMessage(chatId, "🎮 Welcome to the Bingo Pro Bot!\n\nCommands:\n/play - Join an active game\n/balance - Check your current balance\n/help - Show this message");
+            await sendMessage(chatId, "🎮 Welcome to the Bingo Pro Bot!\n\nCommands:\n/play - Join a game instantly\n/balance - Check your current balance\n/help - Show this message");
         }
         else if (text === '/balance') {
             const { data: wallet } = await supabaseAdmin
@@ -91,64 +91,90 @@ export async function POST(req: Request) {
 
             await sendMessage(chatId, `💰 Your current balance is: ${wallet?.balance || 0} Birr`);
         }
-        else if (text === '/play') {
-            // Find an active/waiting game
-            const { data: game } = await supabaseAdmin
-                .from('games')
-                .select('id, bet_amount')
-                .eq('status', 'waiting')
-                .limit(1)
-                .maybeSingle();
+        else if (text === '/play' || text === '/join') {
+            // --- PERSISTENT GAME LOOP ---
 
-            if (!game) {
-                await sendMessage(chatId, "🎰 No active games at the moment. Please wait for an operator to start one.");
-            } else {
-                await sendMessage(chatId, `🎯 Found a game! Bet amount: ${game.bet_amount} Birr.\nType /join to enter.`);
-            }
-        }
-        else if (text === '/join') {
-            const { data: game } = await supabaseAdmin
+            // 1. Find the most recent waiting game
+            let { data: game, error: findError } = await supabaseAdmin
                 .from('games')
                 .select('id, bet_amount, status')
                 .eq('status', 'waiting')
+                .order('created_at', { ascending: false })
                 .limit(1)
                 .maybeSingle();
 
+            // 2. Auto-Rollover: If no game, or the last one is somehow inaccessible, create a new one
             if (!game) {
-                await sendMessage(chatId, "⚠️ No waiting games found matching your request.");
+                // Find system operator (initialized by seed.sql or created here as fallback)
+                let { data: operator } = await supabaseAdmin.from('profiles').select('id').eq('role', 'operator').eq('username', 'System Operator').maybeSingle();
+                if (!operator) {
+                    const { data: newOp } = await supabaseAdmin.from('profiles').insert({ username: 'System Operator', role: 'operator' }).select().single();
+                    operator = newOp;
+                }
+
+                if (!operator) {
+                    await sendMessage(chatId, "❌ System Error: Could not verify Game Operator.");
+                    return NextResponse.json({ ok: true });
+                }
+
+                // Find Main Hall room
+                let { data: room } = await supabaseAdmin.from('rooms').select('id').eq('operator_id', operator.id).eq('name', 'Main Hall').maybeSingle();
+                if (!room) {
+                    const { data: newRoom } = await supabaseAdmin.from('rooms').insert({ operator_id: operator.id, name: 'Main Hall' }).select().single();
+                    room = newRoom;
+                }
+
+                // Create a fresh 'waiting' game
+                const { data: newGame, error: gameError } = await supabaseAdmin.from('games').insert({
+                    room_id: room!.id,
+                    bet_amount: 10.00,
+                    status: 'waiting'
+                }).select().single();
+
+                if (gameError || !newGame) {
+                    console.error('Persistent Loop Error:', gameError);
+                    await sendMessage(chatId, "❌ Failed to rotate to a new game session.");
+                    return NextResponse.json({ ok: true });
+                }
+                game = newGame;
+            }
+
+            if (!game) {
+                await sendMessage(chatId, "❌ Error: Could not synchronize with the game server.");
                 return NextResponse.json({ ok: true });
             }
 
-            // Call the join session (we can do this by making an internal request or using the logic directly)
-            // For simplicity and to ensure the logic is identical, we'll implement it here using a similar pattern.
-            const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
-
-            if (!wallet || wallet.balance < game.bet_amount) {
-                await sendMessage(chatId, `🚫 Insufficient balance. You need ${game.bet_amount} Birr, but have ${wallet?.balance || 0} Birr.`);
-                return NextResponse.json({ ok: true });
-            }
-
-            // Check if already in
+            // 3. Check for existing join (prevent double-betting on the same game)
             const { data: existing } = await supabaseAdmin.from('game_players').select('user_id').eq('game_id', game.id).eq('user_id', profile.id).maybeSingle();
             if (existing) {
-                await sendMessage(chatId, "✅ You are already in this game! Wait for the draw.");
+                await sendMessage(chatId, "✅ You are already in the queue for this game! Please wait for the operator to start the draw.");
                 return NextResponse.json({ ok: true });
             }
 
-            // Process Join
-            const res = await fetch(`${req.url.split('/api')[0]}/api/game/join`, {
+            // 4. Check balance
+            const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
+            if (!wallet || wallet.balance < game.bet_amount) {
+                await sendMessage(chatId, `🚫 Insufficient balance. Entry is ${game.bet_amount} Birr, but you have ${wallet?.balance || 0} Birr.`);
+                return NextResponse.json({ ok: true });
+            }
+
+            // 5. Instant Enrollment
+            await sendMessage(chatId, `🎰 Joining the next game (Bet: ${game.bet_amount} Birr)...`);
+
+            const joinRes = await fetch(`${req.url.split('/api')[0]}/api/game/join`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ gameId: game.id, userId: profile.id })
             });
-            const joinData = await res.json();
+            const joinData = await joinRes.json();
 
             if (joinData.success) {
-                await sendMessage(chatId, "🎟️ Successfully joined! Here is your card grid:\n\n" +
-                    joinData.grid.map((row: any) => row.join(' | ')).join('\n')
+                await sendMessage(chatId, "🎟️ Successfully joined! Here is your card:\n\n" +
+                    joinData.grid.map((row: any) => row.join(' | ')).join('\n') +
+                    "\n\n👉 Good luck! You'll be notified once the draw begins."
                 );
             } else {
-                await sendMessage(chatId, "❌ Join failed: " + joinData.error);
+                await sendMessage(chatId, "❌ Registration failed: " + joinData.error);
             }
         }
         else if (text === '/help') {
