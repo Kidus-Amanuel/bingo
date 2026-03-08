@@ -1,0 +1,11 @@
+{
+  "user": {
+    "id": "usr_2a1f3b8c9d0e4f5a6b7c8d9e0f1a2b3c",
+    "name": "Abebe Kebede",
+    "phone": "+251911234567",
+    "email": "abebe.kebede@example.com",
+    "balance": 1275.50,
+    "currency": "Birr",
+    "memberSince": "2025-01-15T10:30:00Z"
+  }
+}
