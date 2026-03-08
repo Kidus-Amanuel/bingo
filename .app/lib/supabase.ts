@@ -10,4 +10,11 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
-export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+export const supabaseAdmin = supabaseServiceKey
+    ? createClient(supabaseUrl, supabaseServiceKey)
+    : (null as unknown as ReturnType<typeof createClient>);
+
+if (!supabaseServiceKey && process.env.NODE_ENV !== 'production') {
+    console.warn('SUPABASE_SERVICE_ROLE_KEY is missing. Admin features (like bot profile creation) will fail.');
+}
