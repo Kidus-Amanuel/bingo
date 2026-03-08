@@ -8,9 +8,10 @@ CREATE TYPE public.transaction_type AS ENUM ('deposit', 'withdrawal', 'bet', 'wi
 CREATE TYPE public.transaction_status AS ENUM ('pending', 'completed', 'failed', 'cancelled');
 CREATE TYPE public.room_status AS ENUM ('active', 'suspended');
 
--- 2. Profiles (Extends Auth.Users)
+-- 2. Profiles (Optional association with Auth.Users)
 CREATE TABLE public.profiles (
-    id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    auth_user_id UUID UNIQUE REFERENCES auth.users(id) ON DELETE SET NULL,
     telegram_id BIGINT UNIQUE,
     username TEXT,
     phone_number TEXT,

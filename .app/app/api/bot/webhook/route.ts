@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { supabase } from '@/lib/supabase';
+import { supabase, supabaseAdmin } from '@/lib/supabase';
+import { v4 as uuidv4 } from 'uuid';
 
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API = `https://api.telegram.org/bot${BOT_TOKEN}`;
@@ -33,10 +34,12 @@ export async function POST(req: Request) {
             .maybeSingle();
 
         if (!profile) {
-            // Create profile and wallet for new user
-            const { data: newProfile, error: createError } = await supabase
+            // Create profile and wallet for new user using Admin client (bypasses RLS)
+            const newId = uuidv4();
+            const { data: newProfile, error: createError } = await supabaseAdmin
                 .from('profiles')
                 .insert({
+                    id: newId,
                     telegram_id: telegramId,
                     username: username,
                     role: 'player'
@@ -45,18 +48,23 @@ export async function POST(req: Request) {
                 .single();
 
             if (createError || !newProfile) {
+                console.error('Profile Creation Error:', createError);
                 await sendMessage(chatId, "❌ Error creating your profile. Please try again later.");
                 return NextResponse.json({ ok: true });
             }
-            profile = newProfile;
 
-            // Initialize wallet with 100 Birr welcome bonus (optional, for testing)
-            await supabase.from('wallets').insert({
+            // Initialize wallet with 100 Birr welcome bonus
+            const { error: walletError } = await supabaseAdmin.from('wallets').insert({
                 user_id: newProfile.id,
                 balance: 100.00
             });
 
+            if (walletError) {
+                console.error('Wallet Creation Error:', walletError);
+            }
+
             await sendMessage(chatId, `👋 Welcome to Bingo Pro, ${username}! I've created your profile and added 100 Birr welcome bonus to your wallet.`);
+            profile = newProfile;
         }
 
         // Safety check for TypeScript (redundant but keeps it safe for subsequent code)
