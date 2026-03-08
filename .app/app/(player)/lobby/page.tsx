@@ -48,13 +48,24 @@ function LobbyContent() {
         }
     }, [userId, initSession, fetchGames]);
 
-    // Update local games and auto-expand first game
+    // Sync localGames ONLY when the games list itself changes (not on card/selection changes)
     useEffect(() => {
-        setLocalGames(games);
+        setLocalGames(prev => {
+            // Preserve existing timeToStart countdown values — don't reset them
+            return games.map(g => {
+                const existing = prev.find(p => p.gameId === g.gameId);
+                return existing ? { ...g, timeToStart: existing.timeToStart } : { ...g, timeToStart: 30 };
+            });
+        });
+    }, [games]);
+
+    // Auto-select first game once on initial load
+    useEffect(() => {
         if (games.length > 0 && !selectedGame) {
             selectGame(games[0].gameId);
         }
-    }, [games, selectedGame, selectGame]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [games.length]);
 
     // Countdown and Auto-Join Logic
     useEffect(() => {

@@ -48,30 +48,20 @@ export const useGameStore = create<GameStore>((set, get) => ({
     initSession: async (userId: string) => {
         set({ userId });
 
-        // Fetch profile + wallet in parallel
-        const [{ data: profileData }, { data: wallet }] = await Promise.all([
-            supabase
-                .from('profiles')
-                .select('username, avatar_url')
-                .eq('id', userId)
-                .single(),
-            supabase
-                .from('wallets')
-                .select('balance')
-                .eq('user_id', userId)
-                .single()
-        ]);
+        // Use server-side API to bypass RLS for wallet/profile data
+        const res = await fetch(`/api/user/session?userId=${userId}`);
+        const data = await res.json();
 
-        if (profileData) {
+        if (data.profile) {
             set({
                 profile: {
-                    username: profileData.username || 'Player',
-                    avatarUrl: profileData.avatar_url || null
+                    username: data.profile.username || 'Player',
+                    avatarUrl: data.profile.avatar_url || null
                 }
             });
         }
-        if (wallet) {
-            set({ balance: Number(wallet.balance) });
+        if (data.balance !== undefined) {
+            set({ balance: Number(data.balance) });
         }
     },
 
