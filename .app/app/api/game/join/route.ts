@@ -4,7 +4,7 @@ import { generateBingoCard, calculateGridHash } from '@/lib/gameEngine';
 
 export async function POST(req: Request) {
     try {
-        const { gameId, userId } = await req.json();
+        const { gameId, userId, cardTemplateId } = await req.json();
 
         if (!gameId || !userId) {
             return NextResponse.json({ success: false, error: 'Missing gameId or userId' }, { status: 400 });
@@ -52,11 +52,29 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: 'User already joined this game' }, { status: 400 });
         }
 
-        // 4. Generate Bingo Card
-        const grid = generateBingoCard();
-        const gridHash = calculateGridHash(grid);
+        // 4. Determine Bingo Card (Template or Generated)
+        let grid;
+        let gridHash;
 
-        // 5. Deduct Balance (Ideally this should be in a transaction/RPC)
+        if (cardTemplateId) {
+            const { data: template } = await supabaseAdmin
+                .from('card_templates')
+                .select('grid, grid_hash')
+                .eq('id', cardTemplateId)
+                .single();
+
+            if (template) {
+                grid = template.grid;
+                gridHash = template.grid_hash;
+            }
+        }
+
+        if (!grid) {
+            grid = generateBingoCard();
+            gridHash = calculateGridHash(grid);
+        }
+
+        // 5. Deduct Balance
         const { error: deductError } = await supabaseAdmin
             .from('wallets')
             .update({ balance: wallet.balance - game.bet_amount })
@@ -87,10 +105,10 @@ export async function POST(req: Request) {
             .single();
 
         if (cardError) {
-            return NextResponse.json({ success: false, error: 'Failed to create card: ' + cardError.message }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Failed to create card' }, { status: 500 });
         }
 
-        // 5. Join Game
+        // 8. Join Game
         const { error: joinError } = await supabaseAdmin
             .from('game_players')
             .insert({
@@ -100,7 +118,7 @@ export async function POST(req: Request) {
             });
 
         if (joinError) {
-            return NextResponse.json({ success: false, error: 'Failed to join game: ' + joinError.message }, { status: 500 });
+            return NextResponse.json({ success: false, error: 'Failed to join game' }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, cardId: card.id, grid: card.grid });

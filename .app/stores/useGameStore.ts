@@ -10,6 +10,7 @@ interface GameStore {
     userId: string | null;
     balance: number;
     games: Game[];
+    templates: BingoCard[];
     selectedGame: Game | null;
     selectedCard: BingoCard | null;
     isJoining: boolean;
@@ -30,6 +31,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     userId: null,
     balance: 0,
     games: [],
+    templates: [],
     selectedGame: null,
     selectedCard: null,
     isJoining: false,
@@ -53,7 +55,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
 
     fetchGames: async () => {
         // Fetch active/waiting games from Supabase
-        const { data: gamesData, error } = await supabase
+        const { data: gamesData, error: gamesError } = await supabase
             .from('games')
             .select(`
                 id,
@@ -66,10 +68,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
             .in('status', ['waiting', 'started'])
             .order('created_at', { ascending: false });
 
-        if (error) {
-            console.error('Error fetching games:', error);
+        // Fetch card templates
+        const { data: templatesData, error: templatesError } = await supabase
+            .from('card_templates')
+            .select('*')
+            .limit(20);
+
+        if (gamesError || templatesError) {
+            console.error('Error fetching games/templates:', gamesError || templatesError);
             return;
         }
+
+        const templates: BingoCard[] = (templatesData || []).map(t => ({
+            id: t.id,
+            numbers: t.grid
+        }));
 
         const formattedGames: Game[] = (gamesData || []).map((g, index) => ({
             gameNumber: index + 1,
@@ -80,10 +93,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
             totalPot: Number(g.total_pot),
             status: g.status as any,
             range: "1-75",
-            availableCards: [] // Cards should be fetched per game or globally
+            availableCards: templates // Use shared pool for all games
         }));
 
-        set({ games: formattedGames });
+        set({ games: formattedGames, templates });
     },
 
     setBalance: (amount) => set({ balance: amount }),
@@ -102,7 +115,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
             set({ selectedCard: null });
             return;
         }
-        const card = get().selectedGame?.availableCards.find((c: BingoCard) => c.id === cardId) || null;
+        // Template card selection
+        const card = get().templates.find((c) => c.id === cardId) || null;
         set({ selectedCard: card });
     },
 
@@ -121,7 +135,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const res = await fetch('/api/game/join', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gameId, userId })
+                body: JSON.stringify({ gameId, userId, cardTemplateId: cardId || null })
             });
             const data = await res.json();
 

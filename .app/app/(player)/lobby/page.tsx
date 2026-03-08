@@ -61,8 +61,10 @@ function LobbyContent() {
         const timer = setInterval(() => {
             setLocalGames(prev => {
                 return prev.map(game => {
-                    if (game.status === "waiting" && game.timeToStart && game.timeToStart > 0) {
-                        return { ...game, timeToStart: game.timeToStart - 1 };
+                    // Force start countdown at 30s for demo/better UX if needed
+                    const currentTime = game.timeToStart ?? 30;
+                    if (game.status === "waiting" && currentTime > 0) {
+                        return { ...game, timeToStart: currentTime - 1 };
                     }
                     return game;
                 });
