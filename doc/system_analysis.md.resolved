@@ -1,0 +1,126 @@
+# 🎱 Bingo Pro: System Analysis & Technical Design
+
+This document details the architectural foundation, game logic, and business model for the Bingo Pro platform.
+
+## 🏗️ Core Architecture (Next.js + Supabase)
+
+The platform leverages a serverless architecture to ensure high availability and low maintenance costs.
+
+### 1. Database Schema (Supabase/PostgreSQL)
+
+| Table | Description | Key Columns & Types |
+| :--- | :--- | :--- |
+| `profiles` | User profiles | `id` (UUID), `telegram_id` (BIGINT, UNIQUE), `role` (ENUM), `created_at` |
+| `wallets` | Atomic balance | `user_id` (UUID), `balance` (DECIMAL/BIGINT), `currency`, `updated_at` |
+| `transactions` | Financial history | `id` (UUID), `idempotency_key` (TEXT, UNIQUE), `type` (ENUM), `amount`, `status` |
+| `games` | Game states | `id` (UUID), `status` (ENUM), `numbers_drawn` (INT[]), `winner_id` (UUID, NULL) |
+| `game_players`| Player index | `game_id`, `user_id` (UNIQUE KEY on both), `card_id`, `joined_at` |
+| `cards` | Bingo grids | `id` (UUID), `grid` (JSONB), `grid_hash` (TEXT, UNIQUE) |
+| `rooms` | Operator rooms | `id`, `operator_id`, `name`, `config` (JSONB), `status` (active/suspended) |
+| `game_actions` | Audit trail | `id`, `game_id`, `user_id`, `action_type`, `meta_data` (JSONB), `created_at` |
+
+---
+
+### User Lifecycle & Finance Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User (Telegram)
+    participant B as Telegram Bot
+    participant A as Next.js API
+    participant S as Supabase DB
+
+    U->>B: /start
+    B->>A: Create Profile Request
+    A->>S: Insert into profiles (linked to chat_id)
+    S-->>A: Success
+    A-->>B: Profile Created
+    B-->>U: "Welcome! Use /deposit to start."
+
+    U->>B: /deposit 100 Birr
+    B->>A: Log Transaction (pending)
+    A->>S: Insert into transactions
+    B-->>U: "Pay via Telebirr... Send screenshot."
+    U->>B: [Screenshot]
+    B->>A: Notify Admin (or auto-verify)
+    A->>S: Update wallet balance + Update transaction status
+    S-->>A: Atomic Success
+    B-->>U: "Balance updated: 100 Birr"
+```
+
+---
+
+### Real-time Game Sequence
+
+### 1. Card Uniqueness & "Nice" Generation
+To ensure a high-quality, cheat-proof experience:
+- **BINGO Patterns**: Cards are generated using column-specific ranges (B: 1-15, I: 16-30, etc.). This ensures cards look familiar and professional to players.
+- **Uniqueness Guarantee**: Before a game starts, the server generates a `grid_hash` for every card. We apply a `UNIQUE` constraint on `(game_id, grid_hash)` to mathematically guarantee that **no two players will ever have the same card** in a single round.
+- **Fairness**: Cards are generated server-side using a CSPRNG seed that is unique to the game session.
+
+### 2. High-Efficiency Number Calling ("Stop the Hurt")
+To prevent database strain (IOPS bloat) while maintaining real-time speed:
+- **Buffered Broadcasting**: We use **Supabase Realtime (Broadcast Mode)** for the "UI Update" (the visual ball appearing). This is an in-memory broadcast that doesn't touch the database, ensuring zero-latency and low costs.
+- **Batched Persistence**: The drawn numbers are appended to the `games.numbers_drawn` array in the background. For small games, this is a single `UPDATE` per draw.
+- **Stateless Checks**: Winner evaluation happens in-memory within the Edge Function. The database is only updated once a **verified win** is detected, protecting the DB from constant "check-win" queries from thousands of clients.
+
+```mermaid
+sequenceDiagram
+    participant S as Server (Vercel/Supabase)
+    participant P1 as Player 1
+    participant P2 as Player 2
+    participant G as Game Engine (Logic)
+
+    S->>P1: Broadcast: New Game Waiting
+    S->>P2: Broadcast: New Game Waiting
+    P1->>S: Join Game (Transaction)
+    P2->>S: Join Game (Transaction)
+    
+    rect rgb(240, 240, 240)
+        Note over G, S: Game Starts (Countdown 0)
+        loop Every 3-5 Seconds
+            G->>G: Draw Number (CSPRNG)
+            G->>S: Update numbers_drawn array
+            S-->>P1: Realtime Edge: "B-12"
+            S-->>P2: Realtime Edge: "B-12"
+            G->>G: Evaluate All Active Cards
+            Note right of G: If Winner Found
+            G->>S: Update status: 'finished', winner_id: P1
+            S-->>P1: "BINGO! You Win 350 Birr"
+            S-->>P2: "Game Over. P1 Won."
+        end
+    end
+    S->>S: Trigger Settlement Function (payouts)
+```
+
+---
+
+## 💰 Monetization & Optimization
+
+### Revenue Model
+1. **The Rake (Commission)**: The platform takes a fixed % (e.g., 10%) from every `totalPot` before payout.
+2. **Operator Leasing**: Professional hosts "rent" custom rooms for a monthly fee.
+
+### Cost & Speed Optimization
+- **Low Cost**: Use **Supabase Row Level Security (RLS)** to offload auth/security logic. Use **Edge Functions** for minimal cold-start latency.
+- **High Speed**:
+  - Store active game draws in a database array for quick access.
+  - Use **Zustand** for lightning-fast client-side UI updates.
+  - Implement **Optimistic UI** for card marking (validated by server-side draw history).
+
+---
+
+### Financial Management & Integrity
+- **Atomicity**: All financial operations (e.g., `Bet Amount` deduction + `Transaction` log creation) are wrapped in a **PostgreSQL Transaction** or a Supabase RPC to prevent balance drift.
+- **Idempotency**: Clients must send a unique `idempotency_key` (generated on the device) for every financial request to prevent double-charging on network retries.
+- **Precision**: Balances are stored as `DECIMAL` or `BIGINT` (in cents/sub-units) to avoid floating-point inaccuracies common in betting systems.
+
+---
+
+## 🔒 Security & Anti-Cheat
+- **Server-Side Truth**: All number draws and win evaluations happen on the server. Client-side "Bingo" calls are only UI shortcuts that trigger a server-side re-validation.
+- **Audit Trail**: Every significant event (Join, Bet, Win) is logged in a `game_actions` table.
+- **Idempotency**: All betting actions use unique request IDs to prevent double-charging.
+## 🏢 Operator & B2B Management
+- **Room Leasing**: Each operator is assigned a `room` row. A cron job checks the `subscription_status`; if payment fails, the room's `status` is set to `suspended`, immediately disabling game starts via RLS policies.
+- **Operator Isolation**: RLS ensures operators *only* see data (games, players, revenue) associated with their specific `room_id`.
