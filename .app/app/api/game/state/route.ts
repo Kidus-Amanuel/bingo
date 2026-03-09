@@ -4,30 +4,50 @@ import { supabaseAdmin } from '@/lib/supabase';
 export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
-    const gameId = searchParams.get('gameId');
+    const roomId = searchParams.get('gameId');
 
-    if (!userId || !gameId) {
-        return NextResponse.json({ error: 'Missing userId or gameId' }, { status: 400 });
+    if (!userId || !roomId) {
+        return NextResponse.json({ error: 'Missing userId or roomId' }, { status: 400 });
     }
 
-    // Fetch game player record to get the card
-    const { data: playerRecord } = await supabaseAdmin
-        .from('game_players')
-        .select('card_id, cards(grid)')
-        .eq('game_id', gameId)
+    // Fetch the specific user's card for this room
+    const { data: playerCard } = await supabaseAdmin
+        .from('room_cards')
+        .select('id, card_numbers')
+        .eq('room_id', roomId)
         .eq('user_id', userId)
         .single();
 
-    // Fetch game info
-    const { data: game } = await supabaseAdmin
-        .from('games')
-        .select('id, bet_amount, status, total_pot, numbers_drawn')
-        .eq('id', gameId)
+    // Fetch room engine details
+    const { data: room } = await supabaseAdmin
+        .from('rooms_engine')
+        .select('*')
+        .eq('id', roomId)
         .single();
 
+    // Transform card_numbers from integer array back to the expected 5x5 Matrix (or handle as flat on UI)
+    let grid = null;
+    if (playerCard?.card_numbers) {
+        const nums = playerCard.card_numbers;
+        grid = [
+            nums.slice(0, 5),
+            nums.slice(5, 10),
+            nums.slice(10, 15),
+            nums.slice(15, 20),
+            nums.slice(20, 25)
+        ];
+    }
+
     return NextResponse.json({
-        cardId: playerRecord?.card_id ?? null,
-        grid: (playerRecord?.cards as any)?.grid ?? null,
-        game: game ?? null
+        cardId: playerCard?.id ?? null,
+        grid: grid,
+        game: room ? {
+            id: room.id,
+            bet_amount: room.card_price,
+            status: room.status, 
+            total_pot: room.pool,
+            start_time: room.start_time,
+            end_time: room.end_time
+        } : null
     });
 }

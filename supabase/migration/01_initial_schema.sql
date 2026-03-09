@@ -159,3 +159,7 @@ CREATE POLICY "Users can view their own cards" ON public.cards FOR SELECT USING 
 
 -- 12f. Game Player Policies
 CREATE POLICY "Users can view their join status" ON public.game_players FOR SELECT USING (auth.uid() = user_id);
+
+ALTER TABLE public.games
+ADD COLUMN start_time TIMESTAMPTZ,
+ADD COLUMN end_time TIMESTAMPTZ
