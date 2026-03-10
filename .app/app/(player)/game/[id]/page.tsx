@@ -276,7 +276,7 @@ function GameContent() {
                     <div className="flex items-center gap-1.5">
                         <Trophy className="w-3 h-3 text-secondary-500" />
                         <span className="text-xs font-black tabular-nums">{(currentGame.totalPot * 0.85).toFixed(2)}</span>
-                        <span className="text-[7px] font-black text-slate-400 uppercase">Pot (-15%)</span>
+                        <span className="text-[7px] font-black text-slate-400 uppercase tracking-tighter">Pot</span>
                     </div>
                     <div className="w-px h-4 bg-slate-100" />
                     <div className="flex items-center gap-1.5">

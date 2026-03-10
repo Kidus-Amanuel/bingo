@@ -30,7 +30,8 @@ function LobbyContent() {
         joinGame,
         selectedCard,
         selectCard,
-        initSession
+        initSession,
+        subscribeLobby
     } = useGameStore();
 
     const router = useRouter();
@@ -48,13 +49,23 @@ function LobbyContent() {
         }
     }, [userId, initSession, fetchGames]);
 
-    // Sync localGames ONLY when the games list itself changes (not on card/selection changes)
+    // Real-time synchronization
+    useEffect(() => {
+        const unsubscribe = subscribeLobby();
+        return () => unsubscribe();
+    }, [subscribeLobby]);
+
+    // Sync localGames ONLY when the games list itself changes
     useEffect(() => {
         setLocalGames(prev => {
             return games.map(g => {
                 const existing = prev.find(p => p.gameId === g.gameId);
-                // Respect the actual backend timeToStart instead of hardcoding 30
-                return existing ? { ...g, timeToStart: existing.timeToStart } : { ...g, timeToStart: g.timeToStart };
+                // If status changed or time was null before, sync everything
+                if (!existing || existing.status !== g.status || existing.timeToStart === undefined) {
+                    return g;
+                }
+                // Otherwise, preserve existing time if status is still 'waiting'
+                return { ...g, timeToStart: existing.timeToStart };
             });
         });
     }, [games]);
@@ -200,17 +211,23 @@ function LobbyContent() {
                                     </>
                                 ) : (
                                     <>
-                                        <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest leading-none mb-1 text-center">Waiting For Players</p>
+                                        <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest leading-none mb-1 text-center">
+                                            {currentGameData.playersCount < 3 ? "⌛ Waiting For Players" : "Ready to Start"}
+                                        </p>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-xl font-black text-white tabular-nums tracking-tighter">{currentGameData.playersCount} / 3</span>
-                                            <span className="text-[10px] font-black text-primary-400">JOINED</span>
+                                            <span className="text-xl font-black text-white tabular-nums tracking-tighter">
+                                                {currentGameData.playersCount < 3 ? "READY?" : `${currentGameData.playersCount} / 3`}
+                                            </span>
+                                            {currentGameData.playersCount < 3 ? null : (
+                                                <span className="text-[10px] font-black text-primary-400">JOINED</span>
+                                            )}
                                         </div>
                                     </>
                                 )}
                             </div>
                         </div>
                         <div className="flex flex-col items-end">
-                            <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Pot Prize (-15%)</div>
+                            <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Pot Prize</div>
                             <div className="flex items-center gap-1.5 text-secondary-400 font-black">
                                 <Zap className="w-4 h-4 fill-secondary-400" />
                                 <span className="text-lg tracking-tight tabular-nums">{(currentGameData.totalPot * 0.85).toFixed(2)} Birr</span>
@@ -319,14 +336,14 @@ function GameListItem({ game, isSelected, onClick }: { game: Game; isSelected: b
                 </div>
 
                 <div className="flex items-center gap-3 shrink-0">
-                    <div className="flex flex-col items-end scale-90">
-                        <div className="flex items-center gap-1 text-secondary-600 font-black text-[10px]">
+                    <div className="flex flex-col items-end">
+                        <div className="flex items-center gap-1 text-secondary-600 font-black text-xs">
                             <Zap className="w-2.5 h-2.5 fill-secondary-600" />
                             {(game.totalPot * 0.85).toFixed(2)}
                         </div>
-                        <div className="flex items-center gap-1 text-slate-400 font-bold text-[9px]">
+                        <div className="flex items-center gap-1 text-slate-400 font-bold text-[10px]">
                             <Users className="w-2.5 h-2.5" />
-                            {game.playersCount}/3
+                            {game.playersCount < 3 ? "Wait" : `${game.playersCount}/3`}
                         </div>
                     </div>
 

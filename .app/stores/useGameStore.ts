@@ -32,6 +32,7 @@ interface GameStore {
     joinGame: (gameId: string, cardId?: string | null) => Promise<boolean>;
     leaveGame: () => void;
     setCurrentGame: (game: CurrentGame | null) => void;
+    subscribeLobby: () => () => void;
 }
 
 export const useGameStore = create<GameStore>((set, get) => ({
@@ -77,7 +78,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 pool,
                 start_time,
                 created_at,
-                room_cards(user_id)
+                room_cards(user_id, card_template_id)
             `)
             .in('status', ['waiting', 'playing'])
             .order('created_at', { ascending: false });
@@ -122,16 +123,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
 
         set({ games: formattedGames, templates });
+    },
 
-        // 3. Setup REALTIME subscription for the Lobby
-        supabase.channel('lobby_updates')
+    subscribeLobby: () => {
+        const channel = supabase.channel('lobby_updates')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms_engine' }, () => {
-                get().fetchGames(); // Re-fetch on any engine change
+                get().fetchGames();
             })
             .on('postgres_changes', { event: '*', schema: 'public', table: 'room_cards' }, () => {
-                get().fetchGames(); // Re-fetch when someone buys a card
+                get().fetchGames();
             })
             .subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
     },
 
     setBalance: (amount) => set({ balance: amount }),
