@@ -9,13 +9,13 @@ export async function GET(req: Request) {
         return NextResponse.json({ error: 'Missing userId' }, { status: 400 });
     }
 
-    const [{ data: profile }, { data: engineUser }] = await Promise.all([
+    const [{ data: profile }, { data: walletData }] = await Promise.all([
         supabaseAdmin.from('profiles').select('id, username, avatar_url').eq('id', userId).single(),
-        supabaseAdmin.from('users').select('balance').eq('id', userId).single()
+        supabaseAdmin.from('wallets').select('balance').eq('user_id', userId).single()
     ]);
 
     return NextResponse.json({
         profile: profile ?? null,
-        balance: engineUser ? Number(engineUser.balance) : 0
+        balance: walletData ? Number(walletData.balance) : 0
     });
 }
