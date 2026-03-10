@@ -273,9 +273,9 @@ export async function POST(req: Request) {
         }
         else if (text === '/balance') {
             const { data: wallet } = await supabaseAdmin
-                .from('users')
+                .from('wallets')
                 .select('balance')
-                .eq('id', profile.id)
+                .eq('user_id', profile.id)
                 .single();
 
             await sendMessage(chatId, `<b>Wallet Status 💰</b>\n\n👤 <b>Player:</b> ${username}\n🗄 <b>Balance:</b> <code>${wallet?.balance || 0} Birr</code>\n\n<i>Use /play to enter the next round!</i>`);
