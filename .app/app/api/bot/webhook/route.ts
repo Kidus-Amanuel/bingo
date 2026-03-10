@@ -164,9 +164,9 @@ export async function POST(req: Request) {
                     return NextResponse.json({ ok: true });
                 }
 
-                // Initialize wallets
-                await supabaseAdmin.from('wallets').insert({ user_id: newProfile.id, balance: 0.00 });
-                await supabaseAdmin.from('users').insert({ id: newProfile.id, telegram_id: telegramId, balance: 0.00 });
+                // Initialize wallets with 10 Birr bonus
+                await supabaseAdmin.from('wallets').insert({ user_id: newProfile.id, balance: 10.00 });
+                await supabaseAdmin.from('users').insert({ id: newProfile.id, telegram_id: telegramId, balance: 10.00 });
                 profile = newProfile;
 
                 // Welcome message
@@ -316,16 +316,16 @@ export async function POST(req: Request) {
                 return NextResponse.json({ ok: true });
             }
 
-            // 3. Check balance — card selection happens in the lobby, not here
+            // 3. Check balance from wallets table (source of truth for deposits)
             const { data: wallet } = await supabaseAdmin
-                .from('users')
+                .from('wallets')
                 .select('balance')
-                .eq('id', profile.id)
+                .eq('user_id', profile.id)
                 .single();
 
             const betAmount = Number(game.card_price);
-            if (!wallet || wallet.balance < betAmount) {
-                await sendMessage(chatId, `<b>🚫 Insufficient Funds</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet?.balance || 0} Birr</code>\n\n<i>Please top up to continue!</i>`);
+            if (!wallet || Number(wallet.balance) < betAmount) {
+                await sendMessage(chatId, `<b>🚫 Insufficient Funds</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet?.balance || 0} Birr</code>\n\n<i>Use /deposit to top up!</i>`);
                 return NextResponse.json({ ok: true });
             }
 
