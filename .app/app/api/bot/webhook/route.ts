@@ -12,7 +12,22 @@ async function sendMessage(chatId: number, text: string, replyMarkup?: any) {
         body: JSON.stringify({
             chat_id: chatId,
             text,
+            parse_mode: 'HTML',
             reply_markup: replyMarkup
+        })
+    });
+}
+
+async function setBotCommands() {
+    await fetch(`${TELEGRAM_API}/setMyCommands`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            commands: [
+                { command: "play", description: "🚀 Join the next active game" },
+                { command: "balance", description: "💰 View your wallet balance" },
+                { command: "help", description: "🆘 How to play & Rules" }
+            ]
         })
     });
 }
@@ -76,7 +91,7 @@ export async function POST(req: Request) {
                 balance: 100.00
             });
 
-            await sendMessage(chatId, `👋 Welcome to Bingo Pro, ${username}! I've created your profile and added 100 Birr welcome bonus to your wallet.`);
+            await sendMessage(chatId, `<b>Welcome to Bingo Pro, ${username}! 🎱</b>\n\nI've created your profile and added a <b>100 Birr welcome bonus</b> to your wallet! 🎁\n\n<i>Let's start winning!</i>`);
             profile = newProfile;
         } else {
             // Ensure record exists in engine's 'users' table if it was created via web UI
@@ -98,9 +113,10 @@ export async function POST(req: Request) {
 
         // 2. Command Handlers
         if (text === '/start') {
+            await setBotCommands(); // Ensure menu is always updated
             await sendMessage(
                 chatId, 
-                "🎮 Welcome to the Bingo Pro Bot!\n\nCommands:\n/play - Join a game instantly\n/balance - Check your current balance\n/help - Show this message",
+                "<b>Welcome to the Ultimate Bingo Experience! 🎱</b>\n\nJoin thousands of players in real-time draws and win big pots instantly.\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💰 /balance - View your wallet\n🆘 /help - How to play",
                 {
                     inline_keyboard: [[
                         { text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
@@ -115,7 +131,7 @@ export async function POST(req: Request) {
                 .eq('id', profile.id)
                 .single();
 
-            await sendMessage(chatId, `💰 Your current balance is: ${wallet?.balance || 0} Birr`);
+            await sendMessage(chatId, `<b>Wallet Status 💰</b>\n\n👤 <b>Player:</b> ${username}\n🗄 <b>Balance:</b> <code>${wallet?.balance || 0} Birr</code>\n\n<i>Use /play to enter the next round!</i>`);
         }
         else if (text === '/play' || text === '/join') {
             // --- BINGO ENGINE LOOKUP ---
@@ -131,7 +147,7 @@ export async function POST(req: Request) {
 
             // 2. If no room, the engine might not have spawned it yet (or is inactive)
             if (!game) {
-                await sendMessage(chatId, "⚠️ No waiting games available right now. Please wait for the engine to spawn a new room...");
+                await sendMessage(chatId, "<b>⚠️ No active rooms.</b>\n\nThe engine is currently spawning a new room. Please wait a few seconds and try again!");
                 return NextResponse.json({ ok: true });
             }
 
@@ -145,10 +161,10 @@ export async function POST(req: Request) {
             if (existing) {
                 await sendMessage(
                     chatId,
-                    "✅ You are already in the queue for this game! Tap the button below to open your card and watch the draw live:",
+                    "<b>You're already in! ✅</b>\n\nYour spot is reserved. Tap the button below to watch the live draw and claim your prize!",
                     {
                         inline_keyboard: [[
-                            { text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                            { text: "Go to Live Draw 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                         ]]
                     }
                 );
@@ -159,12 +175,12 @@ export async function POST(req: Request) {
             const { data: wallet } = await supabaseAdmin.from('users').select('balance').eq('id', profile.id).single();
             const betAmount = Number(game.card_price);
             if (!wallet || wallet.balance < betAmount) {
-                await sendMessage(chatId, `🚫 Insufficient balance. Entry is ${betAmount} Birr, but you have ${wallet?.balance || 0} Birr.`);
+                await sendMessage(chatId, `<b>🚫 Insufficient Funds</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet?.balance || 0} Birr</code>\n\n<i>Please top up to continue!</i>`);
                 return NextResponse.json({ ok: true });
             }
 
             // 5. Instant Enrollment
-            await sendMessage(chatId, `🎰 Joining the next game (Bet: ${betAmount} Birr)...`);
+            await sendMessage(chatId, `🎰 <b>Entering the arena...</b>\n\nStaking: <code>${betAmount} Birr</code>`);
 
             const joinRes = await fetch(`${req.url.split('/api')[0]}/api/game/join`, {
                 method: 'POST',
@@ -176,19 +192,19 @@ export async function POST(req: Request) {
             if (joinData.success) {
                 await sendMessage(
                     chatId,
-                    "🎟️ Successfully joined! Tap the button below to open your card and watch the draw live:",
+                    "<b>Tickets Confirmed! 🎟</b>\n\nSuccess! Your card has been generated. Tap below to see your lucky numbers and follow the game in real-time.",
                     {
                         inline_keyboard: [[
-                            { text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                            { text: "Launch Game UI 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                         ]]
                     }
                 );
             } else {
-                await sendMessage(chatId, "❌ Registration failed: " + joinData.error);
+                await sendMessage(chatId, "<b>❌ System Error</b>\n\n" + joinData.error);
             }
         }
         else if (text === '/help') {
-            await sendMessage(chatId, "🆘 Bingo Pro Bot Help:\n\n1. /balance - View your current wallet funds.\n2. /play - Find a waiting game to join.\n3. /join - Enter the waiting game and deduct the bet.\n\nGood luck!");
+            await sendMessage(chatId, "<b>Bingo Pro Help 🆘</b>\n\n1️⃣ <b>Join:</b> Use /play to enter the next round.\n2️⃣ <b>Wait:</b> Game starts once 3 players join.\n3️⃣ <b>Win:</b> Numbers are drawn automatically. First pattern wins the Pot!\n\n💰 <b>Wallet:</b> Check /balance anytime.\n\n<i>Good luck, player!</i>");
         }
         else {
             await sendMessage(chatId, "❓ Unknown command. Type /help for assistance.");
