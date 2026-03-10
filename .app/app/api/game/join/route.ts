@@ -43,11 +43,12 @@ export async function POST(req: Request) {
             grid = generateBingoCard();
         }
 
-        // Flatten Grid for DB Insertion
+        // Flatten Grid for DB Insertion (Row-Major to match engine WINNING_PATTERNS)
         const flatCardNumbers: number[] = [];
         for (let r = 0; r < 5; r++) {
             for (let c = 0; c < 5; c++) {
-                flatCardNumbers.push(grid[c][r] === 'FREE' ? 0 : Number(grid[c][r]));
+                const cell = grid[r][c];
+                flatCardNumbers.push(cell === 'FREE' ? 0 : Number(cell));
             }
         }
 
