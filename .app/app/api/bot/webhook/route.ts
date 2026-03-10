@@ -134,59 +134,69 @@ export async function POST(req: Request) {
             .eq('telegram_id', telegramId)
             .maybeSingle();
 
-        // 1a. Handle Contact Sharing (Registration Enhancement)
+        // 1a. Handle Contact Sharing → ONLY place a profile gets created
         if (contact && contact.phone_number) {
             if (profile) {
-                // Update existing profile with phone
+                // Existing user shared contact again → just update the phone
                 await supabaseAdmin
                     .from('profiles')
-                    .update({ phone_number: contact.phone_number })
+                    .update({ phone_number: contact.phone_number, username: username })
                     .eq('id', profile.id);
-
                 await sendMessage(chatId, "✅ <b>Phone number updated successfully!</b>");
-                return NextResponse.json({ ok: true });
+            } else {
+                // New user — create profile with REAL phone number
+                const newId = uuidv4();
+                const { data: newProfile, error: createError } = await supabaseAdmin
+                    .from('profiles')
+                    .insert({
+                        id: newId,
+                        telegram_id: telegramId,
+                        username: username,
+                        phone_number: contact.phone_number, // Real phone, mandatory
+                        role: 'player'
+                    })
+                    .select()
+                    .single();
+
+                if (createError || !newProfile) {
+                    console.error('Profile Creation Error:', createError);
+                    await sendMessage(chatId, "❌ Error creating your profile. Please try again.");
+                    return NextResponse.json({ ok: true });
+                }
+
+                // Initialize wallets
+                await supabaseAdmin.from('wallets').insert({ user_id: newProfile.id, balance: 0.00 });
+                await supabaseAdmin.from('users').insert({ id: newProfile.id, telegram_id: telegramId, balance: 0.00 });
+                profile = newProfile;
+
+                // Welcome message
+                await setBotCommands();
+                await sendMessage(
+                    chatId,
+                    `<b>Welcome to Bingo Pro, ${username}! 🎱</b>\n\nYour registration is complete! 🎁\n\n<i>Let's start winning!</i>\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💳 /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n💰 /balance - View your wallet\nℹ️ /information - Game rules`,
+                    {
+                        keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${newProfile.id}` } }]],
+                        resize_keyboard: true
+                    }
+                );
             }
+            return NextResponse.json({ ok: true });
         }
 
-        // 1b. Auto-Register if no profile exists (without strict phone requirement)
+        // 1b. No profile yet → REQUIRE phone number before doing anything else
         if (!profile) {
-            const newId = uuidv4();
-            const { data: newProfile, error: createError } = await supabaseAdmin
-                .from('profiles')
-                .insert({
-                    id: newId,
-                    telegram_id: telegramId,
-                    username: username,
-                    phone_number: contact?.phone_number || null, // Optional
-                    role: 'player'
-                })
-                .select()
-                .single();
-
-            if (createError || !newProfile) {
-                console.error('Profile Creation Error:', createError);
-                await sendMessage(chatId, "❌ Error creating your profile. Please try again later.");
-                return NextResponse.json({ ok: true });
-            }
-
-            // Initialize wallets
-            await supabaseAdmin.from('wallets').insert({ user_id: newProfile.id, balance: 10.00 });
-            await supabaseAdmin.from('users').insert({ id: newProfile.id, telegram_id: telegramId, balance: 0.00 });
-            profile = newProfile;
-
-            // Welcome message with menu after registration
-            await setBotCommands();
             await sendMessage(
                 chatId,
-                `<b>Welcome to Bingo Pro, ${username}! 🎱</b>\n\nYour registration is complete! 🎁\n\n<i>Let's start winning!</i>\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💳 /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n💰 /balance - View your wallet\nℹ️ /information - Game rules`,
+                "👋 <b>Welcome to Joy Bingo!</b>\n\n📱 To register and start playing, we need your phone number.\n\nPlease tap the button below to share your contact.",
                 {
-                    keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile?.id}` } }]],
-                    resize_keyboard: true
+                    keyboard: [[{ text: "📱 Share My Phone Number", request_contact: true }]],
+                    resize_keyboard: true,
+                    one_time_keyboard: true
                 }
             );
             return NextResponse.json({ ok: true });
         } else {
-            // Ensure record exists in engine's 'users' table if it was created via web UI
+            // Ensure engine 'users' record exists for web-UI created accounts
             const { data: engineUser } = await supabaseAdmin.from('users').select('id').eq('id', profile.id).maybeSingle();
             if (!engineUser) {
                 const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
