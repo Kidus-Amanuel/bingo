@@ -25,6 +25,7 @@ interface GameStore {
 
     // Maps gameId -> cardTemplateId the current user has already bought in that room
     userCardsByGame: Record<string, string>;
+    lastActiveRoomId: string | null;
 
     // Actions
     initSession: (userId: string) => Promise<void>;
@@ -50,6 +51,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     currentGame: null,
     history: [],
     userCardsByGame: {},
+    lastActiveRoomId: null,
 
     initSession: async (userId: string) => {
         set({ userId });
@@ -138,12 +140,21 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 takenCardIds: takenCardIds
             };
         });
-
+ 
         set({ games: formattedGames, templates, userCardsByGame });
 
-        // Auto-select first game if nothing selected
-        if (formattedGames.length > 0 && !get().selectedGame) {
-            get().selectGame(formattedGames[0].gameId);
+        // Auto-select logic for returning from game or first load
+        const state = get();
+        const currentGames = formattedGames;
+        
+        // If we have an active selection that's still valid, keep it
+        if (state.selectedGame && currentGames.some(g => g.gameId === state.selectedGame?.gameId)) {
+            return;
+        }
+
+        // Otherwise, if we have games, auto-select the first one
+        if (currentGames.length > 0) {
+            state.selectGame(currentGames[0].gameId);
         }
     },
 
@@ -272,10 +283,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return 'Network error. Please check your connection and try again.';
     },
 
-    leaveGame: () => set({ 
-        currentGame: null,
-        selectedGame: null,
-        selectedCard: null 
-    }),
+    leaveGame: () => {
+        const current = get().currentGame;
+        set({ 
+            currentGame: null,
+            // Keep selectedGame so the UI doesn't collapse while returning,
+            // but store the ID so fetchGames knows we are transitioning
+            lastActiveRoomId: current?.gameId || null
+        });
+    },
     setCurrentGame: (game) => set({ currentGame: game }),
 }));

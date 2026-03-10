@@ -91,16 +91,16 @@ function LobbyContent() {
         return () => clearInterval(timer);
     }, []);
 
-    // Auto-navigate when the engine moves the room to 'playing'
-    // This is the ONLY navigation trigger — no countdown-based auto-join
+    // Auto-navigate when any game moves to 'playing' status.
+    // This allows active players OR spectators to enter the game page.
     useEffect(() => {
-        if (!currentGame) return;
-        const liveGame = games.find(g => g.gameId === currentGame.gameId);
-        if (liveGame?.status === 'playing') {
+        // Find if any game just started
+        const startedGame = games.find(g => g.status === 'playing');
+        if (startedGame) {
             setPreviewOpen(false);
-            router.push(`/game/${currentGame.gameId}`);
+            router.push(`/game/${startedGame.gameId}`);
         }
-    }, [games, currentGame]);
+    }, [games, router]);
 
     // Auto-clear error after 4 seconds
     useEffect(() => {
@@ -182,11 +182,20 @@ function LobbyContent() {
                                             </Badge>
                                         </div>
 
-                                        {userOwnedCardId && (
+                                        {userOwnedCardId && game.status === 'waiting' && (
                                             <div className="flex items-center gap-2 px-1 py-2 bg-green-50 border border-green-100 rounded-xl">
                                                 <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
                                                 <p className="text-xs font-bold text-green-700">
                                                     You've already joined this game. Wait for the draw!
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {!userOwnedCardId && game.status === 'playing' && (
+                                            <div className="flex items-center gap-2 px-1 py-2 bg-amber-50 border border-amber-100 rounded-xl">
+                                                <Timer className="w-4 h-4 text-amber-500 shrink-0" />
+                                                <p className="text-xs font-bold text-amber-700">
+                                                    Game in progress. You can spectate or wait for the next round.
                                                 </p>
                                             </div>
                                         )}
