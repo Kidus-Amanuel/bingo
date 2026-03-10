@@ -77,13 +77,12 @@ function LobbyContent() {
         });
     }, [games]);
 
-    // Auto-select first game once on initial load
+    // Auto-select first game once on initial load or when coming back from a session
     useEffect(() => {
         if (games.length > 0 && !selectedGame) {
             selectGame(games[0].gameId);
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [games.length]);
+    }, [games, selectedGame, selectGame]);
 
     // Re-render interval to keep countdowns ticking
     const [tick, setTick] = useState(0);
