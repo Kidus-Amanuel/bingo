@@ -140,6 +140,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
         });
 
         set({ games: formattedGames, templates, userCardsByGame });
+
+        // Auto-select first game if nothing selected
+        if (formattedGames.length > 0 && !get().selectedGame) {
+            get().selectGame(formattedGames[0].gameId);
+        }
     },
 
     subscribeLobby: () => {

@@ -77,7 +77,7 @@ function LobbyContent() {
         });
     }, [games]);
 
-    // Auto-select first game once on initial load or when coming back from a session
+    // Auto-select first game whenever the games list is updated and nothing is selected
     useEffect(() => {
         if (games.length > 0 && !selectedGame) {
             selectGame(games[0].gameId);
