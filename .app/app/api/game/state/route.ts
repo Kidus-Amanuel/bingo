@@ -38,6 +38,12 @@ export async function GET(req: Request) {
         ];
     }
 
+    // Fetch player count (unique users in this room)
+    const { count: playerCount } = await supabaseAdmin
+        .from('room_cards')
+        .select('*', { count: 'exact', head: true })
+        .eq('room_id', roomId);
+
     return NextResponse.json({
         cardId: playerCard?.id ?? null,
         grid: grid,
@@ -46,6 +52,7 @@ export async function GET(req: Request) {
             bet_amount: room.card_price,
             status: room.status, 
             total_pot: room.pool,
+            players_count: playerCount || 0,
             start_time: room.start_time,
             end_time: room.end_time
         } : null

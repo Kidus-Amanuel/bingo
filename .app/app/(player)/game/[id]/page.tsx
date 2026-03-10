@@ -109,7 +109,7 @@ function GameContent() {
                         gameId: data.game.id,
                         gameNumber: 1,
                         betAmount: Number(data.game.bet_amount),
-                        playersCount: 0,
+                        playersCount: data.game.players_count || 0,
                         maxPlayers: 100,
                         totalPot: Number(data.game.total_pot),
                         status: data.game.status,
