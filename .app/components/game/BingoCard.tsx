@@ -27,11 +27,11 @@ export function BingoCard({ grid, calledNumbers = [], newlyCalledNumber = null }
         if (!newlyCalledNumber || newlyCalledNumber === prevNewRef.current) return;
         prevNewRef.current = newlyCalledNumber;
 
-        // Find matching cell key
-        for (let r = 0; r < grid.length; r++) {
-            for (let c = 0; c < grid[r].length; c++) {
-                if (grid[r][c] === newlyCalledNumber) {
-                    setFlashCell(`${r}-${c}`);
+        // Find matching cell key (data is column-major: grid[col][row])
+        for (let c = 0; c < 5; c++) {
+            for (let r = 0; r < 5; r++) {
+                if (grid[c] && grid[c][r] === newlyCalledNumber) {
+                    setFlashCell(`${c}-${r}`);
                     setTimeout(() => setFlashCell(null), 1200);
                     return;
                 }
@@ -55,16 +55,17 @@ export function BingoCard({ grid, calledNumbers = [], newlyCalledNumber = null }
 
             {/* Card Grid */}
             <div className="grid grid-cols-5 gap-1.5">
-                {grid.map((row, rowIndex) =>
-                    row.map((cell, colIndex) => {
+                {[0, 1, 2, 3, 4].map((rowIndex) =>
+                    [0, 1, 2, 3, 4].map((colIndex) => {
+                        const cell = grid[colIndex]?.[rowIndex];
                         const isFree = cell === 'FREE';
                         const isHit = !isFree && calledSet.has(cell as number);
-                        const isFlashing = flashCell === `${rowIndex}-${colIndex}`;
+                        const isFlashing = flashCell === `${colIndex}-${rowIndex}`;
                         const h = HEADERS[colIndex];
 
                         return (
                             <div
-                                key={`${rowIndex}-${colIndex}`}
+                                key={`${colIndex}-${rowIndex}`}
                                 className={cn(
                                     "aspect-square rounded-xl flex items-center justify-center font-black text-base transition-all duration-300 relative overflow-hidden border-2",
                                     isFree

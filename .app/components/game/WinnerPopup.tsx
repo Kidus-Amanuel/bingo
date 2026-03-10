@@ -9,6 +9,7 @@ import {
 import { Trophy, ArrowRight, Coins, XCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
+import { useGameStore } from "@/stores/useGameStore";
 
 interface WinnerPopupProps {
     isOpen: boolean;
@@ -21,6 +22,8 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName }: WinnerPopup
     const router = useRouter();
     const [countdown, setCountdown] = useState(4);
 
+    const { leaveGame } = useGameStore();
+
     useEffect(() => {
         let timer: NodeJS.Timeout;
         if (isOpen && countdown > 0) {
@@ -28,10 +31,11 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName }: WinnerPopup
                 setCountdown((prev: number) => prev - 1);
             }, 1000);
         } else if (isOpen && countdown === 0) {
+            leaveGame();
             router.push("/lobby");
         }
         return () => clearInterval(timer);
-    }, [isOpen, countdown, router]);
+    }, [isOpen, countdown, router, leaveGame]);
 
     return (
         <Dialog open={isOpen} onOpenChange={() => { }}>
@@ -87,7 +91,10 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName }: WinnerPopup
 
                     <div className="space-y-3">
                         <Button
-                            onClick={() => router.push("/lobby")}
+                            onClick={() => {
+                                leaveGame();
+                                router.push("/lobby");
+                            }}
                             className={cn(
                                 "w-full h-14 text-white font-black text-lg rounded-2xl shadow-xl transition-all active:scale-95 group",
                                 isWinner
