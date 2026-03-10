@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react";
 import { useGameStore } from "@/stores/useGameStore";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Wallet, ChevronLeft } from "lucide-react";
@@ -11,10 +12,22 @@ interface LobbyHeaderProps {
 
 export function LobbyHeader({ showBack, onBack }: LobbyHeaderProps) {
     const { balance, profile } = useGameStore();
+    const [telegramName, setTelegramName] = useState<string | null>(null);
 
-    const initials = profile?.username
-        ? profile.username.slice(0, 2).toUpperCase()
-        : "??";
+    useEffect(() => {
+        if (typeof window !== "undefined" && (window as any).Telegram?.WebApp) {
+            const initData = (window as any).Telegram.WebApp.initDataUnsafe;
+            if (initData?.user) {
+                setTelegramName(initData.user.username || initData.user.first_name || null);
+            }
+        }
+    }, []);
+
+    const displayUsername = (profile?.username && profile.username !== "Player")
+        ? profile.username
+        : (telegramName || "Player");
+
+    const initials = displayUsername.slice(0, 2).toUpperCase();
 
     return (
         <header className="sticky top-0 z-50 w-full bg-white/80 backdrop-blur-md border-b border-slate-200 px-4 h-16 flex items-center justify-between shadow-sm">
@@ -30,13 +43,13 @@ export function LobbyHeader({ showBack, onBack }: LobbyHeaderProps) {
                 )}
                 <div className="flex items-center gap-3">
                     <Avatar className="h-9 w-9 border-2 border-primary-100">
-                        <AvatarImage src={profile?.avatarUrl ?? ""} alt={profile?.username ?? "Player"} />
-                        <AvatarFallback className="bg-primary-50 text-primary-600 font-bold text-xs">
+                        <AvatarImage src={profile?.avatarUrl ?? ""} alt={displayUsername} />
+                        <AvatarFallback className="bg-primary-50 text-primary-600 font-bold text-xs uppercase">
                             {initials}
                         </AvatarFallback>
                     </Avatar>
                     <span className="font-black text-primary-900 tracking-tight hidden sm:block uppercase">
-                        {profile?.username ?? "Bingo"}
+                        {displayUsername}
                     </span>
                 </div>
             </div>
