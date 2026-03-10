@@ -67,18 +67,18 @@ export const useGameStore = create<GameStore>((set, get) => ({
     },
 
     fetchGames: async () => {
-        // Fetch active/waiting games from Supabase
+        // Fetch active/waiting games from Supabase 'rooms_engine' (Engine Schema)
         const { data: gamesData, error: gamesError } = await supabase
-            .from('games')
+            .from('rooms_engine')
             .select(`
                 id,
-                bet_amount,
+                card_price,
                 status,
-                room_id,
-                total_pot,
+                pool,
+                start_time,
                 created_at
             `)
-            .in('status', ['waiting', 'started'])
+            .in('status', ['waiting', 'playing'])
             .order('created_at', { ascending: false });
 
         // Fetch card templates (10 lucky numbers to pick from)
@@ -100,13 +100,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
         const formattedGames: Game[] = (gamesData || []).map((g, index) => ({
             gameNumber: index + 1,
             gameId: g.id,
-            betAmount: Number(g.bet_amount),
-            playersCount: 0, // In a real app, query game_players count
+            betAmount: Number(g.card_price),
+            playersCount: 0, // Real game fetches from realtime or room_cards
             maxPlayers: 100,
-            totalPot: Number(g.total_pot),
+            totalPot: Number(g.pool),
             status: g.status as any,
             range: "1-75",
-            availableCards: templates // Use shared pool for all games
+            timeToStart: g.start_time ? Math.max(0, Math.floor((new Date(g.start_time).getTime() - Date.now()) / 1000)) : 30,
+            availableCards: templates 
         }));
 
         set({ games: formattedGames, templates });
