@@ -169,7 +169,7 @@ function LobbyContent() {
                                 <GameListItem
                                     game={game}
                                     isSelected={selectedGame?.gameId === game.gameId}
-                                    onClick={() => selectGame(selectedGame?.gameId === game.gameId ? null : game.gameId)}
+                                    onClick={() => selectGame(game.gameId)}
                                 />
 
                                 {selectedGame?.gameId === game.gameId && (
@@ -202,12 +202,17 @@ function LobbyContent() {
                                                 return (
                                                     <button
                                                         key={card.id}
-                                                        disabled={isDisabled}
-                                                        onClick={() => !isDisabled && handleSelectNumber(card.id)}
+                                                        onClick={() => {
+                                                            if (isMyCard) {
+                                                                setPreviewOpen(true);
+                                                            } else if (!isDisabled) {
+                                                                handleSelectNumber(card.id);
+                                                            }
+                                                        }}
                                                         className={cn(
                                                             "aspect-square rounded-xl flex items-center justify-center font-black text-lg transition-all active:scale-90 border-2",
                                                             isMyCard
-                                                                ? "bg-green-500 border-green-500 text-white shadow-lg shadow-green-200"
+                                                                ? "bg-green-500 border-green-500 text-white shadow-lg shadow-green-200 cursor-pointer"
                                                                 : selectedCard?.id === card.id && !userOwnedCardId
                                                                     ? "bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-200"
                                                                     : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 shadow-sm",
