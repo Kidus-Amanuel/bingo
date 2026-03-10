@@ -33,6 +33,7 @@ function LobbyContent() {
         initSession,
         subscribeLobby,
         userCardsByGame,
+        currentGame,
     } = useGameStore();
 
     const router = useRouter();
@@ -91,18 +92,16 @@ function LobbyContent() {
         return () => clearInterval(timer);
     }, []);
 
-    // Side-effect handler for countdown reaching zero
+    // Auto-navigate when the engine moves the room to 'playing'
+    // This is the ONLY navigation trigger — no countdown-based auto-join
     useEffect(() => {
-        if (!selectedGame || isJoining) return;
-
-        const currentGameData = localGames.find(g => g.gameId === selectedGame.gameId);
-        if (currentGameData && currentGameData.timeToStart) {
-            const diff = Math.floor((currentGameData.timeToStart - Date.now()) / 1000);
-            if (diff <= 0 && currentGameData.status === 'waiting') {
-                handleAutoJoin(currentGameData.gameId);
-            }
+        if (!currentGame) return;
+        const liveGame = games.find(g => g.gameId === currentGame.gameId);
+        if (liveGame?.status === 'playing') {
+            setPreviewOpen(false);
+            router.push(`/game/${currentGame.gameId}`);
         }
-    }, [localGames, selectedGame, isJoining, tick]);
+    }, [games, currentGame]);
 
     // Auto-clear error after 4 seconds
     useEffect(() => {
@@ -111,15 +110,6 @@ function LobbyContent() {
         return () => clearTimeout(t);
     }, [error]);
 
-    const handleAutoJoin = async (gameId: string) => {
-        setPreviewOpen(false);
-        const err = await joinGame(gameId, selectedCard?.id);
-        if (err === null) {
-            router.push(`/game/${gameId}`);
-        } else {
-            setError(err);
-        }
-    };
 
     // Immediately join on card tap — modal is just a success preview
     const handleSelectNumber = async (cardId: string) => {
@@ -289,7 +279,8 @@ function LobbyContent() {
                         <DialogTitle className="text-xl font-black text-primary-900 tracking-tight uppercase">LUCKY BINGO CARD</DialogTitle>
                     </DialogHeader>
 
-                    {selectedCard && (
+                    {/* Use currentGame.selectedCard — the server-confirmed card with the real grid */}
+                    {currentGame?.selectedCard && (
                         <div className="space-y-5">
                             <div className="bg-slate-50 p-3 rounded-[2rem] border border-slate-100">
                                 <div className="grid grid-cols-5 gap-1.5 mb-2">
@@ -301,7 +292,7 @@ function LobbyContent() {
                                 </div>
 
                                 <div className="grid grid-cols-5 gap-1.5 aspect-square w-full">
-                                    {getTransposedNumbers(selectedCard.numbers).map((row, rIdx) =>
+                                    {getTransposedNumbers(currentGame.selectedCard.numbers).map((row, rIdx) =>
                                         row.map((num, cIdx) => (
                                             <div
                                                 key={`${rIdx}-${cIdx}`}
@@ -320,16 +311,13 @@ function LobbyContent() {
                             <div className="flex flex-col items-center gap-3">
                                 <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-100 rounded-full">
                                     <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-                                    <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">Card Secured! ✓</span>
+                                    <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">Card Secured! Waiting for draw...</span>
                                 </div>
                                 <Button
-                                    onClick={() => {
-                                        setPreviewOpen(false);
-                                        if (selectedGame) router.push(`/game/${selectedGame.gameId}`);
-                                    }}
+                                    onClick={() => setPreviewOpen(false)}
                                     className="w-full h-12 rounded-xl bg-primary-900 hover:bg-black text-white font-black text-xs uppercase tracking-[0.2em] transition-all active:scale-95 shadow-xl shadow-primary-900/20"
                                 >
-                                    GO TO LIVE DRAW 🎮
+                                    BACK TO LOBBY — WAITING ⏳
                                 </Button>
                             </div>
                         </div>

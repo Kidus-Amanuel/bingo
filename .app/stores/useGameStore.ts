@@ -251,8 +251,8 @@ export const useGameStore = create<GameStore>((set, get) => ({
                         ...game,
                         selectedCard: { id: data.cardId, numbers: data.grid }
                     },
-                    selectedGame: null,
-                    selectedCard: null
+                    // Keep selectedGame and selectedCard so lobby stays open
+                    // and the card preview modal can display the assigned card
                 }));
                 return null; // null = success
             } else {
