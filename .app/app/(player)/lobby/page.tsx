@@ -67,19 +67,10 @@ function LobbyContent() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [games.length]);
 
-    // Keep local countdown for smooth UI, but fetch periodic updates from engine
+    // Re-render interval to keep countdowns ticking
+    const [tick, setTick] = useState(0);
     useEffect(() => {
-        const timer = setInterval(() => {
-            setLocalGames(prev => {
-                return prev.map(game => {
-                    const currentTime = game.timeToStart;
-                    if (game.status === "waiting" && currentTime !== undefined && currentTime > 0) {
-                        return { ...game, timeToStart: currentTime - 1 };
-                    }
-                    return game;
-                });
-            });
-        }, 1000);
+        const timer = setInterval(() => setTick(t => t + 1), 1000);
         return () => clearInterval(timer);
     }, []);
 
@@ -88,10 +79,13 @@ function LobbyContent() {
         if (!selectedGame || isJoining) return;
 
         const currentGameData = localGames.find(g => g.gameId === selectedGame.gameId);
-        if (currentGameData && currentGameData.timeToStart === 0) {
-            handleAutoJoin(currentGameData.gameId);
+        if (currentGameData && currentGameData.timeToStart) {
+            const diff = Math.floor((currentGameData.timeToStart - Date.now()) / 1000);
+            if (diff <= 0 && currentGameData.status === 'waiting') {
+                handleAutoJoin(currentGameData.gameId);
+            }
         }
-    }, [localGames, selectedGame, isJoining]);
+    }, [localGames, selectedGame, isJoining, tick]);
 
     const handleAutoJoin = async (gameId: string) => {
         setPreviewOpen(false);
@@ -159,20 +153,25 @@ function LobbyContent() {
                                         </Badge>
                                     </div>
                                     <div className="grid grid-cols-5 gap-2.5">
-                                        {game.availableCards.map((card, cIdx) => (
-                                            <button
-                                                key={card.id}
-                                                onClick={() => handleSelectNumber(card.id)}
-                                                className={cn(
-                                                    "aspect-square rounded-xl flex items-center justify-center font-black text-lg transition-all active:scale-90 border-2",
-                                                    selectedCard?.id === card.id
-                                                        ? "bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-200"
-                                                        : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 shadow-sm"
-                                                )}
-                                            >
-                                                {cIdx + 1}
-                                            </button>
-                                        ))}
+                                        {game.availableCards.map((card, cIdx) => {
+                                            const isTaken = game.takenCardIds?.includes(card.id);
+                                            return (
+                                                <button
+                                                    key={card.id}
+                                                    disabled={isTaken}
+                                                    onClick={() => handleSelectNumber(card.id)}
+                                                    className={cn(
+                                                        "aspect-square rounded-xl flex items-center justify-center font-black text-lg transition-all active:scale-90 border-2",
+                                                        selectedCard?.id === card.id
+                                                            ? "bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-200"
+                                                            : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 shadow-sm",
+                                                        isTaken && "grayscale opacity-30 cursor-not-allowed border-slate-200"
+                                                    )}
+                                                >
+                                                    {cIdx + 1}
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -193,7 +192,9 @@ function LobbyContent() {
                                     <>
                                         <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest leading-none mb-1">Game Starts In</p>
                                         <div className="flex items-baseline gap-1">
-                                            <span className="text-2xl font-black text-white tabular-nums tracking-tighter">{currentGameData.timeToStart}</span>
+                                            <span className="text-2xl font-black text-white tabular-nums tracking-tighter">
+                                                {Math.max(0, Math.floor((currentGameData.timeToStart - Date.now()) / 1000))}
+                                            </span>
                                             <span className="text-xs font-black text-primary-400">SECONDS</span>
                                         </div>
                                     </>

@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS public.room_cards (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     room_id UUID REFERENCES public.rooms_engine(id) ON DELETE CASCADE,
     user_id UUID REFERENCES public.users(id) ON DELETE CASCADE,
+    card_template_id UUID REFERENCES public.card_templates(id),
     card_numbers INT[] NOT NULL,
     selected_at TIMESTAMPTZ DEFAULT now(),
     -- The critical unique constraint to prevent card duplication in the same room
@@ -66,7 +67,8 @@ CREATE OR REPLACE FUNCTION public.buy_card_atomic(
     p_user_id UUID,
     p_room_id UUID,
     p_card_numbers INT[],
-    p_price DECIMAL
+    p_price DECIMAL,
+    p_template_id UUID DEFAULT NULL
 ) RETURNS UUID LANGUAGE plpgsql AS $$
 DECLARE
     v_card_id UUID;
@@ -84,8 +86,8 @@ BEGIN
     WHERE id = p_room_id;
 
     -- 4. Lock Card (Fails if card_numbers in room exists via UNIQUE constraint)
-    INSERT INTO public.room_cards (room_id, user_id, card_numbers)
-    VALUES (p_room_id, p_user_id, p_card_numbers)
+    INSERT INTO public.room_cards (room_id, user_id, card_numbers, card_template_id)
+    VALUES (p_room_id, p_user_id, p_card_numbers, p_template_id)
     RETURNING id INTO v_card_id;
 
     RETURN v_card_id;

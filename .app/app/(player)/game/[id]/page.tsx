@@ -18,6 +18,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense, useRef } from "react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase";
+import type { Game, BingoCard as BingoType } from "@/app/types/game";
 
 function GameContent() {
     const params = useParams<{ id: string }>();
@@ -63,8 +64,9 @@ function GameContent() {
                         totalPot: Number(data.game.total_pot),
                         status: data.game.status,
                         range: '1-75',
-                        availableCards: [],
-                        timeToStart: data.game.start_time ? new Date(data.game.start_time).getTime() : undefined, // Store Unix start_time in Game
+                        availableCards: [] as BingoType[],
+                        takenCardIds: [],
+                        timeToStart: data.game.start_time ? new Date(data.game.start_time).getTime() : undefined,
                         selectedCard: data.grid
                             ? { id: data.cardId, numbers: data.grid }
                             : null
@@ -112,12 +114,15 @@ function GameContent() {
                 'postgres_changes',
                 { event: 'UPDATE', schema: 'public', table: 'rooms_engine', filter: `id=eq.${gameId}` },
                 (payload) => {
-                    setCurrentGame({
-                        ...useGameStore.getState().currentGame!,
-                        status: payload.new.status,
-                        totalPot: payload.new.pool,
-                        timeToStart: payload.new.start_time ? new Date(payload.new.start_time).getTime() : undefined,
-                    });
+                    const current = useGameStore.getState().currentGame;
+                    if (current) {
+                        setCurrentGame({
+                            ...current,
+                            status: payload.new.status as any,
+                            totalPot: payload.new.pool,
+                            timeToStart: payload.new.start_time ? new Date(payload.new.start_time).getTime() : undefined,
+                        });
+                    }
                 }
             )
             // Listen for new participants

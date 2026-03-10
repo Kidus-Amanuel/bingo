@@ -99,8 +99,12 @@ export const useGameStore = create<GameStore>((set, get) => ({
         }));
 
         const formattedGames: Game[] = (gamesData || []).map((g, index) => {
-            // Count unique players in this room
-            const uniquePlayers = new Set(g.room_cards?.map((p: any) => p.user_id)).size;
+            // Count unique players and track which template IDs are taken
+            const cardData = g.room_cards || [];
+            const uniquePlayers = new Set(cardData.map((p: any) => p.user_id)).size;
+            const takenCardIds = cardData
+                .map((p: any) => p.card_template_id)
+                .filter((id: string | null) => id !== null);
             
             return {
                 gameNumber: index + 1,
@@ -111,8 +115,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 totalPot: Number(g.pool),
                 status: g.status as any,
                 range: "1-75",
-                timeToStart: g.start_time ? Math.max(0, Math.floor((new Date(g.start_time).getTime() - Date.now()) / 1000)) : undefined,
-                availableCards: templates 
+                timeToStart: g.start_time ? new Date(g.start_time).getTime() : undefined,
+                availableCards: templates,
+                takenCardIds: takenCardIds
             };
         });
 

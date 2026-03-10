@@ -56,7 +56,8 @@ export async function POST(req: Request) {
             p_user_id: userId,
             p_room_id: gameId,
             p_card_numbers: flatCardNumbers,
-            p_price: game.card_price 
+            p_price: game.card_price,
+            p_template_id: cardTemplateId || null
         });
 
         if (buyError) {

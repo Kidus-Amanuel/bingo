@@ -10,9 +10,10 @@ export interface Game {
     playersCount: number;
     maxPlayers: number;
     totalPot: number;
-    status: "waiting" | "active" | "finished";
-    timeToStart?: number; // seconds
+    status: "waiting" | "active" | "finished" | "playing";
+    timeToStart?: number; // Unix timestamp in milliseconds
     calledNumbers?: number[];
     range: string;
     availableCards: BingoCard[];
+    takenCardIds: string[];
 }
