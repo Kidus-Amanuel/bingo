@@ -23,6 +23,9 @@ interface GameStore {
     currentGame: CurrentGame | null;
     history: any[];
 
+    // Maps gameId -> cardTemplateId the current user has already bought in that room
+    userCardsByGame: Record<string, string>;
+
     // Actions
     initSession: (userId: string) => Promise<void>;
     fetchGames: () => Promise<void>;
@@ -46,6 +49,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     isJoining: false,
     currentGame: null,
     history: [],
+    userCardsByGame: {},
 
     initSession: async (userId: string) => {
         set({ userId });
@@ -68,7 +72,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
     },
 
     fetchGames: async () => {
-        // 1. Fetch active/waiting games
+        const { userId } = get();
+
+        // 1. Fetch active/waiting games with card data
         const { data: gamesData, error: gamesError } = await supabase
             .from('rooms_engine')
             .select(`
@@ -99,14 +105,25 @@ export const useGameStore = create<GameStore>((set, get) => ({
             numbers: t.grid
         }));
 
+        // Build a map of which card the current user has in each room
+        const userCardsByGame: Record<string, string> = {};
+        if (userId) {
+            (gamesData || []).forEach(g => {
+                const cardData: any[] = g.room_cards || [];
+                const myCard = cardData.find(c => c.user_id === userId && c.card_template_id);
+                if (myCard) {
+                    userCardsByGame[g.id] = myCard.card_template_id;
+                }
+            });
+        }
+
         const formattedGames: Game[] = (gamesData || []).map((g, index) => {
-            // Count unique players and track which template IDs are taken
-            const cardData = g.room_cards || [];
-            const uniquePlayers = new Set(cardData.map((p: any) => p.user_id)).size;
+            const cardData: any[] = g.room_cards || [];
+            const uniquePlayers = new Set(cardData.map((p) => p.user_id)).size;
             const takenCardIds = cardData
-                .map((p: any) => p.card_template_id)
+                .map((p) => p.card_template_id)
                 .filter((id: string | null) => id !== null);
-            
+
             return {
                 gameNumber: index + 1,
                 gameId: g.id,
@@ -115,22 +132,62 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 maxPlayers: 100,
                 totalPot: Number(g.pool),
                 status: g.status as any,
-                range: "1-75",
+                range: '1-75',
                 timeToStart: g.start_time ? new Date(g.start_time).getTime() : undefined,
                 availableCards: templates,
                 takenCardIds: takenCardIds
             };
         });
 
-        set({ games: formattedGames, templates });
+        set({ games: formattedGames, templates, userCardsByGame });
     },
 
     subscribeLobby: () => {
-        const channel = supabase.channel('lobby_updates')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms_engine' }, () => {
+        const channel = supabase
+            .channel('lobby_realtime')
+            // When a room's pool or status changes → full refetch (cheap, infrequent)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms_engine' }, (payload) => {
                 get().fetchGames();
             })
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'room_cards' }, () => {
+            // When a new card is bought → patch takenCardIds + pool in-place for speed,
+            // then do a background refetch to reconcile player counts etc.
+            .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'room_cards' }, (payload: any) => {
+                const newCard = payload.new as {
+                    room_id: string;
+                    user_id: string;
+                    card_template_id: string | null;
+                };
+
+                // Optimistically patch the relevant game instantly
+                set(state => {
+                    const games = state.games.map(g => {
+                        if (g.gameId !== newCard.room_id) return g;
+
+                        const currentTaken = g.takenCardIds || [];
+                        const takenCardIds = newCard.card_template_id && !currentTaken.includes(newCard.card_template_id)
+                            ? [...currentTaken, newCard.card_template_id]
+                            : currentTaken;
+
+                        return {
+                            ...g,
+                            playersCount: g.playersCount + 1,
+                            takenCardIds
+                        };
+                    });
+
+                    // Also patch selectedGame if it matches so the bottom bar updates
+                    const selectedGame = state.selectedGame?.gameId === newCard.room_id
+                        ? games.find(g => g.gameId === newCard.room_id) || state.selectedGame
+                        : state.selectedGame;
+
+                    return { games, selectedGame };
+                });
+
+                // Full refetch in background to sync pool amount and any missed changes
+                get().fetchGames();
+            })
+            // Handle card deletions (e.g. if someone's card is removed)
+            .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'room_cards' }, () => {
                 get().fetchGames();
             })
             .subscribe();
@@ -156,7 +213,6 @@ export const useGameStore = create<GameStore>((set, get) => ({
             set({ selectedCard: null });
             return;
         }
-        // Template card selection
         const card = get().templates.find((c) => c.id === cardId) || null;
         set({ selectedCard: card });
     },
@@ -181,9 +237,16 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const data = await res.json();
 
             if (data.success) {
+                // Record that this user now owns this card in this game
+                const userCardsByGame = {
+                    ...get().userCardsByGame,
+                    ...(cardId ? { [gameId]: cardId } : {})
+                };
+
                 set((state) => ({
                     balance: state.balance - game.betAmount,
                     isJoining: false,
+                    userCardsByGame,
                     currentGame: {
                         ...game,
                         selectedCard: { id: data.cardId, numbers: data.grid }
@@ -192,6 +255,9 @@ export const useGameStore = create<GameStore>((set, get) => ({
                     selectedCard: null
                 }));
                 return true;
+            } else {
+                // Surface the error message from the server
+                console.error('Join failed:', data.error);
             }
         } catch (err) {
             console.error('Join Error:', err);

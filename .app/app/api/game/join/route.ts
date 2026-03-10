@@ -62,15 +62,17 @@ export async function POST(req: Request) {
         });
 
         if (buyError) {
-            // Check if constraint error mapping to Card duplication or Lack of Funds
             const msg = buyError.message || JSON.stringify(buyError);
+            if (msg.includes('already_joined') || msg.includes('unique_user_per_room')) {
+               return NextResponse.json({ success: false, error: 'You already have a card in this game.' }, { status: 400 });
+            }
             if (msg.includes('unique_room_card')) {
-               return NextResponse.json({ success: false, error: 'Someone else just picked this numbers. They are locked.' }, { status: 400 });
+               return NextResponse.json({ success: false, error: 'Someone else just picked this card. Please choose another.' }, { status: 400 });
             }
             if (msg.includes('balance') || msg.includes('violates check constraint')) {
-               return NextResponse.json({ success: false, error: 'Insufficient balance' }, { status: 400 });
+               return NextResponse.json({ success: false, error: 'Insufficient balance. Please top up to continue.' }, { status: 400 });
             }
-            return NextResponse.json({ success: false, error: `Failed to join game natively: ${msg}` }, { status: 500 });
+            return NextResponse.json({ success: false, error: `Failed to join game: ${msg}` }, { status: 500 });
         }
 
         return NextResponse.json({ success: true, cardId: cardId, grid: grid });

@@ -192,7 +192,7 @@ export async function POST(req: Request) {
             if (joinData.success) {
                 await sendMessage(
                     chatId,
-                    "<b>Tickets Confirmed! 🎟</b>\n\nSuccess! Your card has been generated. Tap below to see your lucky numbers and follow the game in real-time.",
+                "<b>Good Luck! 🎟</b>",
                     {
                         inline_keyboard: [[
                             { text: "Launch Game UI 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }

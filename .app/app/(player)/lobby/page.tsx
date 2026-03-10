@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useGameStore } from "@/stores/useGameStore";
-import { Timer, Users, PlayCircle, Loader2, ChevronRight, Zap } from "lucide-react";
+import { Timer, Users, PlayCircle, Loader2, ChevronRight, Zap, CheckCircle2 } from "lucide-react";
 import { Game, BingoCard } from "@/app/types/game";
 import { cn } from "@/lib/utils";
 import {
@@ -31,7 +31,8 @@ function LobbyContent() {
         selectedCard,
         selectCard,
         initSession,
-        subscribeLobby
+        subscribeLobby,
+        userCardsByGame,
     } = useGameStore();
 
     const router = useRouter();
@@ -47,25 +48,30 @@ function LobbyContent() {
         } else {
             fetchGames();
         }
-    }, [userId, initSession, fetchGames]);
+    }, [userId]);
 
     // Real-time synchronization
     useEffect(() => {
         const unsubscribe = subscribeLobby();
         return () => unsubscribe();
-    }, [subscribeLobby]);
+    }, []);
 
-    // Sync localGames ONLY when the games list itself changes
+    // Sync localGames - always take fresh pot/takenCardIds from store,
+    // only preserve the local countdown timer if the game is still waiting
     useEffect(() => {
         setLocalGames(prev => {
             return games.map(g => {
                 const existing = prev.find(p => p.gameId === g.gameId);
-                // If status changed or time was null before, sync everything
-                if (!existing || existing.status !== g.status || existing.timeToStart === undefined) {
+                // Always update pot, takenCardIds, and playersCount from live data
+                // Only preserve the local timeToStart to avoid countdown jumps
+                if (!existing || existing.status !== g.status) {
                     return g;
                 }
-                // Otherwise, preserve existing time if status is still 'waiting'
-                return { ...g, timeToStart: existing.timeToStart };
+                return {
+                    ...g,
+                    // Keep local countdown if it exists and game is still waiting
+                    timeToStart: existing.timeToStart ?? g.timeToStart,
+                };
             });
         });
     }, [games]);
@@ -98,16 +104,37 @@ function LobbyContent() {
         }
     }, [localGames, selectedGame, isJoining, tick]);
 
+    // Auto-clear error after 4 seconds
+    useEffect(() => {
+        if (!error) return;
+        const t = setTimeout(() => setError(null), 4000);
+        return () => clearTimeout(t);
+    }, [error]);
+
     const handleAutoJoin = async (gameId: string) => {
         setPreviewOpen(false);
-        // Always navigate to game — user may already be joined via bot
-        await joinGame(gameId, selectedCard?.id);
-        router.push(`/game/${gameId}`);
+        const success = await joinGame(gameId, selectedCard?.id);
+        if (success) {
+            router.push(`/game/${gameId}`);
+        } else {
+            setError("Could not join — the card may already be taken or your balance is too low.");
+        }
     };
 
     const handleSelectNumber = (cardId: string) => {
         selectCard(cardId);
         setPreviewOpen(true);
+    };
+
+    const handleConfirmCard = async () => {
+        if (!selectedGame || !selectedCard) return;
+        setPreviewOpen(false);
+        const success = await joinGame(selectedGame.gameId, selectedCard.id);
+        if (success) {
+            router.push(`/game/${selectedGame.gameId}`);
+        } else {
+            setError("Could not join — the card may already be taken or your balance is too low.");
+        }
     };
 
     const getTransposedNumbers = (numbers: (number | "FREE")[][]) => {
@@ -130,7 +157,7 @@ function LobbyContent() {
             />
 
             {error && (
-                <div className="fixed top-20 left-4 right-4 z-[60] bg-error-500 text-white p-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 duration-300">
+                <div className="fixed top-20 left-4 right-4 z-[60] bg-red-500 text-white p-4 rounded-xl shadow-2xl animate-in slide-in-from-top-4 duration-300">
                     <span className="font-bold flex items-center gap-2">
                         <Zap className="w-4 h-4 fill-white" />
                         {error}
@@ -145,49 +172,70 @@ function LobbyContent() {
                         <p className="font-bold text-slate-400">Searching for games...</p>
                     </div>
                 ) : (
-                    localGames.map((game) => (
-                        <div key={game.gameId} className="space-y-3">
-                            <GameListItem
-                                game={game}
-                                isSelected={selectedGame?.gameId === game.gameId}
-                                onClick={() => selectGame(selectedGame?.gameId === game.gameId ? null : game.gameId)}
-                            />
+                    localGames.map((game) => {
+                        // Check if this user already bought a card in this game
+                        const userOwnedCardId = userCardsByGame[game.gameId];
 
-                            {selectedGame?.gameId === game.gameId && (
-                                <div className="animate-in slide-in-from-top-4 duration-300 space-y-4 px-1 py-2">
-                                    <div className="flex items-center justify-between px-1">
-                                        <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
-                                            Select Lucky Number
-                                        </h3>
-                                        <Badge variant="outline" className="text-[9px] font-black text-primary-500 bg-primary-50/50 border-primary-100 uppercase tracking-tighter">
-                                            Join on 0s
-                                        </Badge>
+                        return (
+                            <div key={game.gameId} className="space-y-3">
+                                <GameListItem
+                                    game={game}
+                                    isSelected={selectedGame?.gameId === game.gameId}
+                                    onClick={() => selectGame(selectedGame?.gameId === game.gameId ? null : game.gameId)}
+                                />
+
+                                {selectedGame?.gameId === game.gameId && (
+                                    <div className="animate-in slide-in-from-top-4 duration-300 space-y-4 px-1 py-2">
+                                        <div className="flex items-center justify-between px-1">
+                                            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">
+                                                {userOwnedCardId ? "Your Card" : "Select Lucky Number"}
+                                            </h3>
+                                            <Badge variant="outline" className="text-[9px] font-black text-primary-500 bg-primary-50/50 border-primary-100 uppercase tracking-tighter">
+                                                {userOwnedCardId ? "1 Card / Player" : "Join on 0s"}
+                                            </Badge>
+                                        </div>
+
+                                        {userOwnedCardId && (
+                                            <div className="flex items-center gap-2 px-1 py-2 bg-green-50 border border-green-100 rounded-xl">
+                                                <CheckCircle2 className="w-4 h-4 text-green-500 shrink-0" />
+                                                <p className="text-xs font-bold text-green-700">
+                                                    You've already joined this game. Wait for the draw!
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        <div className="grid grid-cols-5 gap-2.5">
+                                            {game.availableCards.map((card, cIdx) => {
+                                                const isTaken = game.takenCardIds?.includes(card.id);
+                                                const isMyCard = userOwnedCardId === card.id;
+                                                // If user already owns a card in this game, disable every OTHER card
+                                                const isDisabled = isTaken || (!!userOwnedCardId && !isMyCard);
+
+                                                return (
+                                                    <button
+                                                        key={card.id}
+                                                        disabled={isDisabled}
+                                                        onClick={() => !isDisabled && handleSelectNumber(card.id)}
+                                                        className={cn(
+                                                            "aspect-square rounded-xl flex items-center justify-center font-black text-lg transition-all active:scale-90 border-2",
+                                                            isMyCard
+                                                                ? "bg-green-500 border-green-500 text-white shadow-lg shadow-green-200"
+                                                                : selectedCard?.id === card.id && !userOwnedCardId
+                                                                    ? "bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-200"
+                                                                    : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 shadow-sm",
+                                                            isDisabled && !isMyCard && "grayscale opacity-30 cursor-not-allowed border-slate-200"
+                                                        )}
+                                                    >
+                                                        {cIdx + 1}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-5 gap-2.5">
-                                        {game.availableCards.map((card, cIdx) => {
-                                            const isTaken = game.takenCardIds?.includes(card.id);
-                                            return (
-                                                <button
-                                                    key={card.id}
-                                                    disabled={isTaken}
-                                                    onClick={() => handleSelectNumber(card.id)}
-                                                    className={cn(
-                                                        "aspect-square rounded-xl flex items-center justify-center font-black text-lg transition-all active:scale-90 border-2",
-                                                        selectedCard?.id === card.id
-                                                            ? "bg-primary-600 border-primary-600 text-white shadow-lg shadow-primary-200"
-                                                            : "bg-white border-slate-100 text-slate-400 hover:border-slate-300 shadow-sm",
-                                                        isTaken && "grayscale opacity-30 cursor-not-allowed border-slate-200"
-                                                    )}
-                                                >
-                                                    {cIdx + 1}
-                                                </button>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    ))
+                                )}
+                            </div>
+                        );
+                    })
                 )}
             </main>
 
@@ -218,7 +266,7 @@ function LobbyContent() {
                                             <span className="text-xl font-black text-white tabular-nums tracking-tighter">
                                                 {currentGameData.playersCount < 3 ? "READY?" : `${currentGameData.playersCount} / 3`}
                                             </span>
-                                            {currentGameData.playersCount < 3 ? null : (
+                                            {currentGameData.playersCount >= 3 && (
                                                 <span className="text-[10px] font-black text-primary-400">JOINED</span>
                                             )}
                                         </div>
@@ -276,11 +324,17 @@ function LobbyContent() {
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: {selectedCard.id.toUpperCase()}</span>
                                 </div>
                                 <Button
-                                    onClick={() => setPreviewOpen(false)}
+                                    onClick={handleConfirmCard}
                                     className="w-full h-12 rounded-xl bg-primary-900 hover:bg-black text-white font-black text-xs uppercase tracking-[0.2em] transition-all active:scale-95 shadow-xl shadow-primary-900/20"
                                 >
-                                    CONFIRM SELECTION
+                                    CONFIRM & JOIN GAME
                                 </Button>
+                                <button
+                                    onClick={() => setPreviewOpen(false)}
+                                    className="text-xs text-slate-400 font-bold underline underline-offset-2"
+                                >
+                                    Cancel
+                                </button>
                             </div>
                         </div>
                     )}
