@@ -98,7 +98,15 @@ export async function POST(req: Request) {
 
         // 2. Command Handlers
         if (text === '/start') {
-            await sendMessage(chatId, "🎮 Welcome to the Bingo Pro Bot!\n\nCommands:\n/play - Join a game instantly\n/balance - Check your current balance\n/help - Show this message");
+            await sendMessage(
+                chatId, 
+                "🎮 Welcome to the Bingo Pro Bot!\n\nCommands:\n/play - Join a game instantly\n/balance - Check your current balance\n/help - Show this message",
+                {
+                    inline_keyboard: [[
+                        { text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                    ]]
+                }
+            );
         }
         else if (text === '/balance') {
             const { data: wallet } = await supabaseAdmin
@@ -140,7 +148,7 @@ export async function POST(req: Request) {
                     "✅ You are already in the queue for this game! Tap the button below to open your card and watch the draw live:",
                     {
                         inline_keyboard: [[
-                            { text: "Play Now 🎮", url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` }
+                            { text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                         ]]
                     }
                 );
@@ -171,7 +179,7 @@ export async function POST(req: Request) {
                     "🎟️ Successfully joined! Tap the button below to open your card and watch the draw live:",
                     {
                         inline_keyboard: [[
-                            { text: "Play Now 🎮", url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` }
+                            { text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                         ]]
                     }
                 );
