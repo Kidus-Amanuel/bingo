@@ -73,11 +73,43 @@ export async function POST(req: Request) {
     try {
         const update = await req.json();
 
-        let text = update.message.text;
-        const telegramId = update.message.from.id;
-        const chatId = update.message.chat.id;
-        const username = update.message.from.username || update.message.from.first_name;
-        const contact = update.message.contact;
+        let text = update.message?.text || '';
+        let telegramId: number;
+        let chatId: number;
+        let username: string;
+        let contact = update.message?.contact;
+
+        // Handle Callback Queries (Inline button clicks)
+        if (update.callback_query) {
+            telegramId = update.callback_query.from.id;
+            chatId = update.callback_query.message.chat.id;
+            username = update.callback_query.from.username || update.callback_query.from.first_name;
+
+            const data = update.callback_query.data;
+            if (data === 'deposit_telebirr') {
+                const depositMsg = `💳 <b>የ Telebirr አካውንት</b>\n<code>0945940021</code> - KIDUS AMANUEL\n\n<b>መመሪያ</b>\n1. ከላይ ባለው የ Telebirr አካውንት ገንዘቡን ያስገቡ\n2. ብሩን ስትልኩ የከፈላችሁበትን መረጃ የያዝ አጭር የጹሁፍ መልክት(sms) ከ Telebirr ይደርሳችኋል\n3. የደረሳችሁን አጭር የጹሁፍ መለክት(sms) ሙሉዉን ኮፒ(copy) በማረግ ከታሽ ባለው የቴሌግራም የጹሁፍ ማስገቢአው ላይ ፔስት(paste) በማረግ ይላኩት\n\nየሚያጋጥማቹ የክፍያ ችግር ካለ @BingoProSupport በዚ ሳፖርት ማዉራት ይችላሉ`;
+                await sendMessage(chatId, depositMsg);
+            } else if (data === 'deposit_cbe') {
+                const depositMsg = `💳 <b>CBE Birr</b>\n<code>0945940021</code> - KIDUS AMANUEL\n\n<b>መመሪያ</b>\n1. ከላይ ባለው የ CBE Birr አካውንት ገንዘቡን ያስገቡ\n2. ብሩን ስትልኩ የከፈላችሁበትን መረጃ የያዝ አጭር የጹሁፍ መልክት(sms) ከ CBE ይደርሳችኋል\n3. የደረሳችሁን አጭር የጹሁፍ መለክት(sms) ሙሉዉን ኮፒ(copy) በማረግ ከታሽ ባለው የቴሌግራም የጹሁፍ ማስገቢአው ላይ ፔስት(paste) በማረግ ይላኩት\n\nየሚያጋጥማቹ የክፍያ ችግር ካለ @BingoProSupport በዚ ሳፖርት ማዉራት ይችላሉ`;
+                await sendMessage(chatId, depositMsg);
+            }
+
+            // Answer callback query to remove loading state on button
+            await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ callback_query_id: update.callback_query.id })
+            });
+
+            // We continue processing below to ensure profile exists, but we can return early for callbacks
+            return NextResponse.json({ ok: true });
+        } else if (update.message) {
+            telegramId = update.message.from.id;
+            chatId = update.message.chat.id;
+            username = update.message.from.username || update.message.from.first_name;
+        } else {
+            return NextResponse.json({ ok: true });
+        }
 
         if (!text && !contact) {
             return NextResponse.json({ ok: true });
@@ -234,7 +266,7 @@ export async function POST(req: Request) {
             await setBotCommands(); // Ensure menu is always updated
             await sendMessage(
                 chatId,
-                "<b>Welcome to the Ultimate Bingo Experience! 🎱</b>\n\nJoin thousands of players in real-time draws and win big pots instantly.\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n� /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n�💰 /balance - View your wallet\nℹ️ /information - Game rules",
+                "<b>Welcome to the Ultimate Bingo Experience! 🎱</b>\n\nJoin thousands of players in real-time draws and win big pots instantly.\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💳 /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n💰 /balance - View your wallet\nℹ️ /information - Game rules",
                 {
                     keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }]],
                     resize_keyboard: true
@@ -310,15 +342,23 @@ export async function POST(req: Request) {
                 }
             );
         }
-        else if (text === '/deposit') {
-            const depositMsg = `<b>Please select the bank option you wish to use for the top-up.</b>\n\n💳 <b>የ Telebirr አካውንት</b>\n<code>0945940021</code> - KIDUS AMANUEL\n\n<b>መመሪያ</b>\n1. ከላይ ባለው የ Telebirr አካውንት ገንዘቡን ያስገቡ\n2. ብሩን ስትልኩ የከፈላችሁበትን መረጃ የያዝ አጭር የጹሁፍ መልክት(sms) ከ Telebirr ይደርሳችኋል\n3. የደረሳችሁን አጭር የጹሁፍ መለክት(sms) ሙሉዉን ኮፒ(copy) በማረግ ከታሽ ባለው የቴሌግራም የጹሁፍ ማስገቢአው ላይ ፔስት(paste) በማረግ ይላኩት\n\n💳 <b>CBE Birr</b>\n<code>0945940021</code> - KIDUS AMANUEL\n\nየሚያጋጥማቹ የክፍያ ችግር ካለ @BingoProSupport በዚ ሳፖርት ማዉራት ይችላሉ`;
-            await sendMessage(chatId, depositMsg);
+        else if (text === '/deposit' || text === '/deposite') {
+            await sendMessage(
+                chatId,
+                "<b>Please select the bank option you wish to use for the top-up.</b>",
+                {
+                    inline_keyboard: [
+                        [{ text: "💳 Telebirr", callback_data: "deposit_telebirr" }],
+                        [{ text: "💳 CBE Birr", callback_data: "deposit_cbe" }]
+                    ]
+                }
+            );
         }
-        else if (text === '/withdraw') {
+        else if (text === '/withdraw' || text === '/withdrawal') {
             await supabaseAdmin.from('bot_user_states').upsert({ telegram_id: telegramId, state: 'WAITING_WITHDRAWAL_AMOUNT' });
             await sendMessage(chatId, "<b>Please enter the amount you wish to withdraw.</b>\n\n<i>Minimum withdrawal: 100 Birr</i>");
         }
-        else if (text === '/information' || text === '/rule' || text === '/help') {
+        else if (text === '/information' || text === '/rule' || text === '/help' || text === '/info') {
             await sendMessage(chatId, "<b>Bingo Pro Rules & Info ℹ️</b>\n\n1️⃣ <b>Join:</b> Use /play to enter the next round.\n2️⃣ <b>Deposit/Withdraw:</b> Use /deposit to add funds and /withdraw to cash out.\n3️⃣ <b>Wait:</b> Game starts once players join.\n4️⃣ <b>Win:</b> Numbers are drawn automatically. First pattern wins the Pot!\n\n💰 <b>Wallet:</b> Check /balance anytime.\n\n<i>For support, contact @BingoProSupport</i>");
         }
         else if (text.toLowerCase().includes("transferred") && text.toLowerCase().includes("telebirr")) {
