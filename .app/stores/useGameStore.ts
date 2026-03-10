@@ -67,7 +67,7 @@ export const useGameStore = create<GameStore>((set, get) => ({
     },
 
     fetchGames: async () => {
-        // Fetch active/waiting games from Supabase 'rooms_engine' (Engine Schema)
+        // 1. Fetch active/waiting games
         const { data: gamesData, error: gamesError } = await supabase
             .from('rooms_engine')
             .select(`
@@ -76,12 +76,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
                 status,
                 pool,
                 start_time,
-                created_at
+                created_at,
+                room_cards(user_id)
             `)
             .in('status', ['waiting', 'playing'])
             .order('created_at', { ascending: false });
 
-        // Fetch card templates (10 lucky numbers to pick from)
+        // 2. Fetch card templates
         const { data: templatesData, error: templatesError } = await supabase
             .from('card_templates')
             .select('*')
@@ -97,20 +98,35 @@ export const useGameStore = create<GameStore>((set, get) => ({
             numbers: t.grid
         }));
 
-        const formattedGames: Game[] = (gamesData || []).map((g, index) => ({
-            gameNumber: index + 1,
-            gameId: g.id,
-            betAmount: Number(g.card_price),
-            playersCount: 0, // Real game fetches from realtime or room_cards
-            maxPlayers: 100,
-            totalPot: Number(g.pool),
-            status: g.status as any,
-            range: "1-75",
-            timeToStart: g.start_time ? Math.max(0, Math.floor((new Date(g.start_time).getTime() - Date.now()) / 1000)) : 30,
-            availableCards: templates 
-        }));
+        const formattedGames: Game[] = (gamesData || []).map((g, index) => {
+            // Count unique players in this room
+            const uniquePlayers = new Set(g.room_cards?.map((p: any) => p.user_id)).size;
+            
+            return {
+                gameNumber: index + 1,
+                gameId: g.id,
+                betAmount: Number(g.card_price),
+                playersCount: uniquePlayers,
+                maxPlayers: 100,
+                totalPot: Number(g.pool),
+                status: g.status as any,
+                range: "1-75",
+                timeToStart: g.start_time ? Math.max(0, Math.floor((new Date(g.start_time).getTime() - Date.now()) / 1000)) : undefined,
+                availableCards: templates 
+            };
+        });
 
         set({ games: formattedGames, templates });
+
+        // 3. Setup REALTIME subscription for the Lobby
+        supabase.channel('lobby_updates')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'rooms_engine' }, () => {
+                get().fetchGames(); // Re-fetch on any engine change
+            })
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'room_cards' }, () => {
+                get().fetchGames(); // Re-fetch when someone buys a card
+            })
+            .subscribe();
     },
 
     setBalance: (amount) => set({ balance: amount }),

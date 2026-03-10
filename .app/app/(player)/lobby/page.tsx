@@ -67,14 +67,13 @@ function LobbyContent() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [games.length]);
 
-    // Countdown and Auto-Join Logic
+    // Keep local countdown for smooth UI, but fetch periodic updates from engine
     useEffect(() => {
         const timer = setInterval(() => {
             setLocalGames(prev => {
                 return prev.map(game => {
-                    // Force start countdown at 30s for demo/better UX if needed
-                    const currentTime = game.timeToStart ?? 30;
-                    if (game.status === "waiting" && currentTime > 0) {
+                    const currentTime = game.timeToStart;
+                    if (game.status === "waiting" && currentTime !== undefined && currentTime > 0) {
                         return { ...game, timeToStart: currentTime - 1 };
                     }
                     return game;
@@ -187,14 +186,26 @@ function LobbyContent() {
                     <div className="bg-primary-900 rounded-2xl p-4 flex items-center justify-between shadow-2xl shadow-primary-900/40 border border-white/10 backdrop-blur-md bg-opacity-95">
                         <div className="flex items-center gap-3">
                             <div className="w-10 h-10 rounded-xl bg-hero-gradient flex items-center justify-center text-white shrink-0 shadow-lg shadow-primary-950">
-                                <Timer className="w-5 h-5 animate-pulse" />
+                                <Timer className={cn("w-5 h-5", (currentGameData.timeToStart !== undefined) && "animate-pulse")} />
                             </div>
                             <div>
-                                <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest leading-none mb-1">Game Starts In</p>
-                                <div className="flex items-baseline gap-1">
-                                    <span className="text-2xl font-black text-white tabular-nums tracking-tighter">{currentGameData.timeToStart || 0}</span>
-                                    <span className="text-xs font-black text-primary-400">SECONDS</span>
-                                </div>
+                                {currentGameData.timeToStart !== undefined ? (
+                                    <>
+                                        <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest leading-none mb-1">Game Starts In</p>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-2xl font-black text-white tabular-nums tracking-tighter">{currentGameData.timeToStart}</span>
+                                            <span className="text-xs font-black text-primary-400">SECONDS</span>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-[10px] font-black text-primary-400 uppercase tracking-widest leading-none mb-1 text-center">Waiting For Players</p>
+                                        <div className="flex items-baseline gap-1">
+                                            <span className="text-xl font-black text-white tabular-nums tracking-tighter">{currentGameData.playersCount} / 3</span>
+                                            <span className="text-[10px] font-black text-primary-400">JOINED</span>
+                                        </div>
+                                    </>
+                                )}
                             </div>
                         </div>
                         <div className="flex flex-col items-end">
@@ -314,7 +325,7 @@ function GameListItem({ game, isSelected, onClick }: { game: Game; isSelected: b
                         </div>
                         <div className="flex items-center gap-1 text-slate-400 font-bold text-[9px]">
                             <Users className="w-2.5 h-2.5" />
-                            {game.playersCount}/{game.maxPlayers}
+                            {game.playersCount}/3
                         </div>
                     </div>
 

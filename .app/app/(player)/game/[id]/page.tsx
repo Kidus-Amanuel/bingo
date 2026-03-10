@@ -116,7 +116,19 @@ function GameContent() {
                         ...useGameStore.getState().currentGame!,
                         status: payload.new.status,
                         totalPot: payload.new.pool,
+                        timeToStart: payload.new.start_time ? new Date(payload.new.start_time).getTime() : undefined,
                     });
+                }
+            )
+            // Listen for new participants
+            .on(
+                'postgres_changes',
+                { event: 'INSERT', schema: 'public', table: 'room_cards', filter: `room_id=eq.${gameId}` },
+                () => {
+                    const current = useGameStore.getState().currentGame;
+                    if (current) {
+                        setCurrentGame({ ...current, playersCount: (current.playersCount || 0) + 1 });
+                    }
                 }
             )
             // Listen for Winners
