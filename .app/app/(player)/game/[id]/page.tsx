@@ -151,16 +151,18 @@ function GameContent() {
 
         const channel = supabase
             .channel(`game_room_${gameId}`)
-            // New number called by engine
+            // ⚡ New number called — NO row filter here so it works before
+            //    REPLICA IDENTITY FULL migration is applied. We filter client-side.
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'called_numbers', filter: `room_id=eq.${gameId}` },
+                { event: 'INSERT', schema: 'public', table: 'called_numbers' },
                 (payload: any) => {
+                    // Client-side filter by room_id
+                    if (payload.new.room_id !== gameId) return;
                     const num: number = payload.new.number;
                     if (!numbersRef.current.includes(num)) {
                         setCalledNumbers(prev => [...prev, num]);
                         setNewlyCalledNumber(num);
-                        // play a subtle beep if supported
                         playCallSound();
                     }
                 }
@@ -168,8 +170,9 @@ function GameContent() {
             // Room status / pool update
             .on(
                 'postgres_changes',
-                { event: 'UPDATE', schema: 'public', table: 'rooms_engine', filter: `id=eq.${gameId}` },
+                { event: 'UPDATE', schema: 'public', table: 'rooms_engine' },
                 (payload: any) => {
+                    if (payload.new.id !== gameId) return;
                     const current = useGameStore.getState().currentGame;
                     if (current) {
                         setCurrentGame({
@@ -186,8 +189,9 @@ function GameContent() {
             // New player joined
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'room_cards', filter: `room_id=eq.${gameId}` },
-                () => {
+                { event: 'INSERT', schema: 'public', table: 'room_cards' },
+                (payload: any) => {
+                    if (payload.new.room_id !== gameId) return;
                     const current = useGameStore.getState().currentGame;
                     if (current) {
                         setCurrentGame({ ...current, playersCount: (current.playersCount || 0) + 1 });
@@ -197,8 +201,9 @@ function GameContent() {
             // Winner declared
             .on(
                 'postgres_changes',
-                { event: 'INSERT', schema: 'public', table: 'game_winners', filter: `room_id=eq.${gameId}` },
+                { event: 'INSERT', schema: 'public', table: 'game_winners' },
                 (payload: any) => {
+                    if (payload.new.room_id !== gameId) return;
                     const isMe = payload.new.user_id === uid;
                     setWinnerDetails({ isMe, name: isMe ? 'You' : 'Another Player' });
                     setIsWinnerPopupOpen(true);
@@ -208,7 +213,25 @@ function GameContent() {
                 setIsConnected(status === 'SUBSCRIBED');
             });
 
+        // ── Polling fallback: re-sync called numbers every 5s ─────────────
+        // Ensures the state stays consistent even if a realtime event is missed.
+        const poll = setInterval(async () => {
+            const { data } = await supabase
+                .from('called_numbers')
+                .select('number')
+                .eq('room_id', gameId)
+                .order('called_at', { ascending: true });
+            if (data) {
+                const nums = data.map((c: any) => c.number);
+                // Only update if there are new numbers we haven't seen
+                const current = numbersRef.current;
+                const hasNew = nums.some((n: number) => !current.includes(n));
+                if (hasNew) setCalledNumbers(nums);
+            }
+        }, 5000);
+
         return () => {
+            clearInterval(poll);
             supabase.removeChannel(channel);
         };
     }, [gameId, uid, setCurrentGame]);
