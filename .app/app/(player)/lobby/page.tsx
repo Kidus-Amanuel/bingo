@@ -51,10 +51,10 @@ function LobbyContent() {
     // Sync localGames ONLY when the games list itself changes (not on card/selection changes)
     useEffect(() => {
         setLocalGames(prev => {
-            // Preserve existing timeToStart countdown values — don't reset them
             return games.map(g => {
                 const existing = prev.find(p => p.gameId === g.gameId);
-                return existing ? { ...g, timeToStart: existing.timeToStart } : { ...g, timeToStart: 30 };
+                // Respect the actual backend timeToStart instead of hardcoding 30
+                return existing ? { ...g, timeToStart: existing.timeToStart } : { ...g, timeToStart: g.timeToStart };
             });
         });
     }, [games]);
@@ -209,10 +209,10 @@ function LobbyContent() {
                             </div>
                         </div>
                         <div className="flex flex-col items-end">
-                            <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Pot Prize</div>
+                            <div className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Pot Prize (-15%)</div>
                             <div className="flex items-center gap-1.5 text-secondary-400 font-black">
                                 <Zap className="w-4 h-4 fill-secondary-400" />
-                                <span className="text-lg tracking-tight tabular-nums">{currentGameData.totalPot} Birr</span>
+                                <span className="text-lg tracking-tight tabular-nums">{(currentGameData.totalPot * 0.85).toFixed(2)} Birr</span>
                             </div>
                         </div>
                     </div>
@@ -321,7 +321,7 @@ function GameListItem({ game, isSelected, onClick }: { game: Game; isSelected: b
                     <div className="flex flex-col items-end scale-90">
                         <div className="flex items-center gap-1 text-secondary-600 font-black text-[10px]">
                             <Zap className="w-2.5 h-2.5 fill-secondary-600" />
-                            {game.totalPot}
+                            {(game.totalPot * 0.85).toFixed(2)}
                         </div>
                         <div className="flex items-center gap-1 text-slate-400 font-bold text-[9px]">
                             <Users className="w-2.5 h-2.5" />
