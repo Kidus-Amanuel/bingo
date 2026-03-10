@@ -32,7 +32,7 @@ interface GameStore {
     setBalance: (amount: number) => void;
     selectGame: (gameId: string | null) => void;
     selectCard: (cardId: string | null) => void;
-    joinGame: (gameId: string, cardId?: string | null) => Promise<boolean>;
+    joinGame: (gameId: string, cardId?: string | null) => Promise<string | null>;
     leaveGame: () => void;
     setCurrentGame: (game: CurrentGame | null) => void;
     subscribeLobby: () => () => void;
@@ -218,13 +218,14 @@ export const useGameStore = create<GameStore>((set, get) => ({
     },
 
     joinGame: async (gameId: string, cardId?: string | null) => {
-        const { userId, balance, games } = get();
-        if (!userId) return false;
+        const { userId, games } = get();
+        if (!userId) return 'Not logged in. Please reload the page.';
 
         const game = games.find((g: Game) => g.gameId === gameId);
-        if (!game) return false;
+        if (!game) return 'Game not found. It may have already started.';
 
-        if (cardId && balance < game.betAmount) return false;
+        // NOTE: Do NOT check balance here — the store balance may not be loaded yet.
+        // The backend buy_card_atomic RPC is the authoritative validator.
 
         set({ isJoining: true });
 
@@ -237,14 +238,13 @@ export const useGameStore = create<GameStore>((set, get) => ({
             const data = await res.json();
 
             if (data.success) {
-                // Record that this user now owns this card in this game
                 const userCardsByGame = {
                     ...get().userCardsByGame,
                     ...(cardId ? { [gameId]: cardId } : {})
                 };
 
                 set((state) => ({
-                    balance: state.balance - game.betAmount,
+                    balance: Math.max(0, state.balance - game.betAmount),
                     isJoining: false,
                     userCardsByGame,
                     currentGame: {
@@ -254,17 +254,17 @@ export const useGameStore = create<GameStore>((set, get) => ({
                     selectedGame: null,
                     selectedCard: null
                 }));
-                return true;
+                return null; // null = success
             } else {
-                // Surface the error message from the server
-                console.error('Join failed:', data.error);
+                set({ isJoining: false });
+                return data.error || 'Could not join. Please try again.';
             }
-        } catch (err) {
+        } catch (err: any) {
             console.error('Join Error:', err);
         }
 
         set({ isJoining: false });
-        return false;
+        return 'Network error. Please check your connection and try again.';
     },
 
     leaveGame: () => set({ currentGame: null }),

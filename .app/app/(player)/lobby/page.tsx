@@ -113,11 +113,11 @@ function LobbyContent() {
 
     const handleAutoJoin = async (gameId: string) => {
         setPreviewOpen(false);
-        const success = await joinGame(gameId, selectedCard?.id);
-        if (success) {
+        const err = await joinGame(gameId, selectedCard?.id);
+        if (err === null) {
             router.push(`/game/${gameId}`);
         } else {
-            setError("Could not join — the card may already be taken or your balance is too low.");
+            setError(err);
         }
     };
 
@@ -125,13 +125,13 @@ function LobbyContent() {
     const handleSelectNumber = async (cardId: string) => {
         if (!selectedGame) return;
         selectCard(cardId);
-        const success = await joinGame(selectedGame.gameId, cardId);
-        if (success) {
+        const err = await joinGame(selectedGame.gameId, cardId);
+        if (err === null) {
             // Open the preview modal to show the assigned card, then let user navigate
             setPreviewOpen(true);
         } else {
             selectCard(null);
-            setError("Could not join — the card may already be taken or your balance is too low.");
+            setError(err);
         }
     };
 
