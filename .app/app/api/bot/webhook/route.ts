@@ -299,7 +299,7 @@ export async function POST(req: Request) {
                     "<b>You're already in! ✅</b>\n\nYour card is reserved. Open the app to watch the live draw!",
                     {
                         inline_keyboard: [[
-                            { text: "Open Lobby 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                            { text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                         ]]
                     }
                 );
@@ -325,7 +325,7 @@ export async function POST(req: Request) {
                 `<b>🎱 There's a game waiting for you!</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet.balance} Birr</code>\n\n<i>Open the lobby below, pick your lucky card, and wait for the draw!</i>`,
                 {
                     inline_keyboard: [[
-                        { text: "Pick My Card 🎟", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                        { text: "Play Now 🎟", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                     ]]
                 }
             );
