@@ -37,7 +37,7 @@ function getBannerColor(letter: string | null) {
         case 'N': return 'bg-amber-500 shadow-amber-200';
         case 'G': return 'bg-green-600 shadow-green-200';
         case 'O': return 'bg-purple-600 shadow-purple-200';
-        default:  return 'bg-primary-950 shadow-primary-900/20';
+        default: return 'bg-primary-950 shadow-primary-900/20';
     }
 }
 
@@ -142,7 +142,7 @@ function GameContent() {
         };
 
         loadRoomData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [gameId, uid]);
 
     // ── 2. Real-Time Subscriptions ────────────────────────────────────────
@@ -202,10 +202,18 @@ function GameContent() {
             .on(
                 'postgres_changes',
                 { event: 'INSERT', schema: 'public', table: 'game_winners' },
-                (payload: any) => {
+                async (payload: any) => {
                     if (payload.new.room_id !== gameId) return;
                     const isMe = payload.new.user_id === uid;
-                    setWinnerDetails({ isMe, name: isMe ? 'You' : 'Another Player' });
+
+                    // Fetch username from profiles
+                    let winnerUsername = isMe ? 'You' : 'A Player';
+                    if (!isMe) {
+                        const { data: p } = await supabase.from('profiles').select('username').eq('id', payload.new.user_id).maybeSingle();
+                        if (p?.username) winnerUsername = p.username;
+                    }
+
+                    setWinnerDetails({ isMe, name: winnerUsername });
                     setIsWinnerPopupOpen(true);
                 }
             )
@@ -482,6 +490,8 @@ function GameContent() {
                 prize={currentGame.totalPot * 0.85}
                 isWinner={winnerDetails?.isMe ?? false}
                 winnerName={winnerDetails?.name}
+                gameId={gameId}
+                calledNumbers={calledNumbers}
             />
         </div>
     );
