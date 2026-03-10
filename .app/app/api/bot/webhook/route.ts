@@ -134,10 +134,8 @@ export async function POST(req: Request) {
             await sendMessage(chatId, `<b>Wallet Status 💰</b>\n\n👤 <b>Player:</b> ${username}\n🗄 <b>Balance:</b> <code>${wallet?.balance || 0} Birr</code>\n\n<i>Use /play to enter the next round!</i>`);
         }
         else if (text === '/play' || text === '/join') {
-            // --- BINGO ENGINE LOOKUP ---
-
-            // 1. Find the most recent waiting room in the engine
-            let { data: game, error: findError } = await supabaseAdmin
+            // 1. Find the most recent waiting room
+            const { data: game } = await supabaseAdmin
                 .from('rooms_engine')
                 .select('id, card_price, status')
                 .eq('status', 'waiting')
@@ -145,63 +143,55 @@ export async function POST(req: Request) {
                 .limit(1)
                 .maybeSingle();
 
-            // 2. If no room, the engine might not have spawned it yet (or is inactive)
             if (!game) {
-                await sendMessage(chatId, "<b>⚠️ No active rooms.</b>\n\nThe engine is currently spawning a new room. Please wait a few seconds and try again!");
+                await sendMessage(chatId, "<b>⚠️ No active rooms right now.</b>\n\nThe engine is spawning a new room. Please wait a moment and try again!");
                 return NextResponse.json({ ok: true });
             }
 
-            // 3. Check for existing join (using room_cards)
+            // 2. Check if already joined this room
             const { data: existing } = await supabaseAdmin
                 .from('room_cards')
                 .select('id')
                 .eq('room_id', game.id)
                 .eq('user_id', profile.id)
                 .maybeSingle();
+
             if (existing) {
                 await sendMessage(
                     chatId,
-                    "<b>You're already in! ✅</b>\n\nYour spot is reserved. Tap the button below to watch the live draw and claim your prize!",
+                    "<b>You're already in! ✅</b>\n\nYour card is reserved. Open the app to watch the live draw!",
                     {
                         inline_keyboard: [[
-                            { text: "Go to Live Draw 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                            { text: "Open Lobby 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
                         ]]
                     }
                 );
                 return NextResponse.json({ ok: true });
             }
 
-            // 4. Check balance (from engine users table)
-            const { data: wallet } = await supabaseAdmin.from('users').select('balance').eq('id', profile.id).single();
+            // 3. Check balance — card selection happens in the lobby, not here
+            const { data: wallet } = await supabaseAdmin
+                .from('users')
+                .select('balance')
+                .eq('id', profile.id)
+                .single();
+
             const betAmount = Number(game.card_price);
             if (!wallet || wallet.balance < betAmount) {
                 await sendMessage(chatId, `<b>🚫 Insufficient Funds</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet?.balance || 0} Birr</code>\n\n<i>Please top up to continue!</i>`);
                 return NextResponse.json({ ok: true });
             }
 
-            // 5. Instant Enrollment
-            await sendMessage(chatId, `🎰 <b>Entering the arena...</b>\n\nStaking: <code>${betAmount} Birr</code>`);
-
-            const joinRes = await fetch(`${req.url.split('/api')[0]}/api/game/join`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ gameId: game.id, userId: profile.id })
-            });
-            const joinData = await joinRes.json();
-
-            if (joinData.success) {
-                await sendMessage(
-                    chatId,
-                "<b>Good Luck! 🎟</b>",
-                    {
-                        inline_keyboard: [[
-                            { text: "Launch Game UI 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
-                        ]]
-                    }
-                );
-            } else {
-                await sendMessage(chatId, "<b>❌ System Error</b>\n\n" + joinData.error);
-            }
+            // 4. Send user to lobby to pick their lucky card
+            await sendMessage(
+                chatId,
+                `<b>🎱 There's a game waiting for you!</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet.balance} Birr</code>\n\n<i>Open the lobby below, pick your lucky card, and wait for the draw!</i>`,
+                {
+                    inline_keyboard: [[
+                        { text: "Pick My Card 🎟", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
+                    ]]
+                }
+            );
         }
         else if (text === '/help') {
             await sendMessage(chatId, "<b>Bingo Pro Help 🆘</b>\n\n1️⃣ <b>Join:</b> Use /play to enter the next round.\n2️⃣ <b>Wait:</b> Game starts once 3 players join.\n3️⃣ <b>Win:</b> Numbers are drawn automatically. First pattern wins the Pot!\n\n💰 <b>Wallet:</b> Check /balance anytime.\n\n<i>Good luck, player!</i>");
