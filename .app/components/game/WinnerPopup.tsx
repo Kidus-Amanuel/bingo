@@ -21,9 +21,15 @@ interface WinnerPopupProps {
 export function WinnerPopup({ isOpen, prize, isWinner, winnerName }: WinnerPopupProps) {
     const router = useRouter();
     const [countdown, setCountdown] = useState(4);
+    const { leaveGame, userId, initSession, fetchGames } = useGameStore();
+    // 1. Refresh balance immediately when they win
+    useEffect(() => {
+        if (isOpen && userId) {
+            initSession(userId);
+        }
+    }, [isOpen, userId, initSession]);
 
-    const { leaveGame } = useGameStore();
-
+    // 2. Countdown timer to return to lobby
     useEffect(() => {
         let timer: NodeJS.Timeout;
         if (isOpen && countdown > 0) {
@@ -32,10 +38,11 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName }: WinnerPopup
             }, 1000);
         } else if (isOpen && countdown === 0) {
             leaveGame();
+            fetchGames(); // ensure lobby has fresh game list
             router.push("/lobby");
         }
         return () => clearInterval(timer);
-    }, [isOpen, countdown, router, leaveGame]);
+    }, [isOpen, countdown, router, leaveGame, fetchGames]);
 
     return (
         <Dialog open={isOpen} onOpenChange={() => { }}>
@@ -93,6 +100,7 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName }: WinnerPopup
                         <Button
                             onClick={() => {
                                 leaveGame();
+                                fetchGames();
                                 router.push("/lobby");
                             }}
                             className={cn(

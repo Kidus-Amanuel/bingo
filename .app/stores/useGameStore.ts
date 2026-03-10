@@ -267,6 +267,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
         return 'Network error. Please check your connection and try again.';
     },
 
-    leaveGame: () => set({ currentGame: null }),
+    leaveGame: () => set({ 
+        currentGame: null,
+        selectedGame: null,
+        selectedCard: null 
+    }),
     setCurrentGame: (game) => set({ currentGame: game }),
 }));
