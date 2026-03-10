@@ -92,6 +92,12 @@ export async function POST(req: Request) {
             } else if (data === 'deposit_cbe') {
                 const depositMsg = `💳 <b>CBE Birr</b>\n<code>0945940021</code> - KIDUS AMANUEL\n\n<b>መመሪያ</b>\n1. ከላይ ባለው የ CBE Birr አካውንት ገንዘቡን ያስገቡ\n2. ብሩን ስትልኩ የከፈላችሁበትን መረጃ የያዝ አጭር የጹሁፍ መልክት(sms) ከ CBE ይደርሳችኋል\n3. የደረሳችሁን አጭር የጹሁፍ መለክት(sms) ሙሉዉን ኮፒ(copy) በማረግ ከታሽ ባለው የቴሌግራም የጹሁፍ ማስገቢአው ላይ ፔስት(paste) በማረግ ይላኩት\n\nየሚያጋጥማቹ የክፍያ ችግር ካለ @BingoProSupport በዚ ሳፖርት ማዉራት ይችላሉ`;
                 await sendMessage(chatId, depositMsg);
+            } else if (data === 'withdraw_telebirr') {
+                await supabaseAdmin.from('bot_user_states').upsert({ telegram_id: telegramId, state: 'WAITING_WITHDRAWAL_AMOUNT_TELEBIRR' });
+                await sendMessage(chatId, "<b>💸 Withdraw to Telebirr</b>\n\nPlease enter the amount you wish to withdraw.\n\n<i>Minimum withdrawal: 100 Birr</i>");
+            } else if (data === 'withdraw_cbe') {
+                await supabaseAdmin.from('bot_user_states').upsert({ telegram_id: telegramId, state: 'WAITING_WITHDRAWAL_AMOUNT_CBE' });
+                await sendMessage(chatId, "<b>💸 Withdraw to CBE Birr</b>\n\nPlease enter the amount you wish to withdraw.\n\n<i>Minimum withdrawal: 100 Birr</i>");
             }
 
             // Answer callback query to remove loading state on button
@@ -128,7 +134,7 @@ export async function POST(req: Request) {
             .eq('telegram_id', telegramId)
             .maybeSingle();
 
-        // 1a. Handle Contact Sharing (Registration)
+        // 1a. Handle Contact Sharing (Registration Enhancement)
         if (contact && contact.phone_number) {
             if (profile) {
                 // Update existing profile with phone
@@ -136,41 +142,37 @@ export async function POST(req: Request) {
                     .from('profiles')
                     .update({ phone_number: contact.phone_number })
                     .eq('id', profile.id);
-            } else {
-                // Create profile and wallet for new user using Admin client
-                const newId = uuidv4();
-                const { data: newProfile, error: createError } = await supabaseAdmin
-                    .from('profiles')
-                    .insert({
-                        id: newId,
-                        telegram_id: telegramId,
-                        username: username,
-                        phone_number: contact.phone_number,
-                        role: 'player'
-                    })
-                    .select()
-                    .single();
 
-                if (createError || !newProfile) {
-                    console.error('Profile Creation Error:', createError);
-                    await sendMessage(chatId, "❌ Error creating your profile. Please try again later.");
-                    return NextResponse.json({ ok: true });
-                }
-
-                // Initialize wallet with 0 Birr
-                await supabaseAdmin.from('wallets').insert({
-                    user_id: newProfile.id,
-                    balance: 10.00
-                });
-
-                // Initialize BINGO ENGINE User (Engine Compat)
-                await supabaseAdmin.from('users').insert({
-                    id: newProfile.id,
-                    telegram_id: telegramId,
-                    balance: 0.00
-                });
-                profile = newProfile;
+                await sendMessage(chatId, "✅ <b>Phone number updated successfully!</b>");
+                return NextResponse.json({ ok: true });
             }
+        }
+
+        // 1b. Auto-Register if no profile exists (without strict phone requirement)
+        if (!profile) {
+            const newId = uuidv4();
+            const { data: newProfile, error: createError } = await supabaseAdmin
+                .from('profiles')
+                .insert({
+                    id: newId,
+                    telegram_id: telegramId,
+                    username: username,
+                    phone_number: contact?.phone_number || null, // Optional
+                    role: 'player'
+                })
+                .select()
+                .single();
+
+            if (createError || !newProfile) {
+                console.error('Profile Creation Error:', createError);
+                await sendMessage(chatId, "❌ Error creating your profile. Please try again later.");
+                return NextResponse.json({ ok: true });
+            }
+
+            // Initialize wallets
+            await supabaseAdmin.from('wallets').insert({ user_id: newProfile.id, balance: 10.00 });
+            await supabaseAdmin.from('users').insert({ id: newProfile.id, telegram_id: telegramId, balance: 0.00 });
+            profile = newProfile;
 
             // Welcome message with menu after registration
             await setBotCommands();
@@ -180,20 +182,6 @@ export async function POST(req: Request) {
                 {
                     keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile?.id}` } }]],
                     resize_keyboard: true
-                }
-            );
-            return NextResponse.json({ ok: true });
-        }
-
-        if (!profile) {
-            // Require contact sharing to register
-            await sendMessage(
-                chatId,
-                "👋 <b>Welcome to Joy Bingo!</b>\n\nTo start playing, we need your phone number for registration and withdrawals. Please tap the button below to share your contact.",
-                {
-                    keyboard: [[{ text: "📱 Register (Share Contact)", request_contact: true }]],
-                    resize_keyboard: true,
-                    one_time_keyboard: true
                 }
             );
             return NextResponse.json({ ok: true });
@@ -222,7 +210,7 @@ export async function POST(req: Request) {
             .eq('telegram_id', telegramId)
             .maybeSingle();
 
-        if (userState && userState.state === 'WAITING_WITHDRAWAL_AMOUNT' && !text.startsWith('/')) {
+        if (userState && userState.state.startsWith('WAITING_WITHDRAWAL_AMOUNT') && !text.startsWith('/')) {
             const amount = parseFloat(text);
 
             if (isNaN(amount)) {
@@ -250,13 +238,13 @@ export async function POST(req: Request) {
                 telegram_id: telegramId,
                 amount: amount,
                 type: 'withdrawal',
-                payment_method: 'telebirr/cbe', // Default placeholder, operator decides or we ask later
+                payment_method: userState.state === 'WAITING_WITHDRAWAL_AMOUNT_TELEBIRR' ? 'telebirr' : 'cbe_birr',
                 status: 'pending',
                 raw_message: text
             });
 
             await supabaseAdmin.from('bot_user_states').delete().eq('telegram_id', telegramId);
-            await sendMessage(chatId, `✅ <b>Withdrawal Request Received</b>\n\nYour request to withdraw <b>${amount.toFixed(2)} Birr</b> has been submitted to our operators.\n\nStatus: ⏳ Pending`);
+            await sendMessage(chatId, `✅ <b>Withdrawal Request Received</b>\n\nYour request to withdraw <b>${amount.toFixed(2)} Birr</b> via <b>${userState.state === 'WAITING_WITHDRAWAL_AMOUNT_TELEBIRR' ? 'Telebirr' : 'CBE'}</b> has been submitted to our operators.\n\nStatus: ⏳ Pending`);
             return NextResponse.json({ ok: true });
         }
 
@@ -355,8 +343,16 @@ export async function POST(req: Request) {
             );
         }
         else if (text === '/withdraw' || text === '/withdrawal') {
-            await supabaseAdmin.from('bot_user_states').upsert({ telegram_id: telegramId, state: 'WAITING_WITHDRAWAL_AMOUNT' });
-            await sendMessage(chatId, "<b>Please enter the amount you wish to withdraw.</b>\n\n<i>Minimum withdrawal: 100 Birr</i>");
+            await sendMessage(
+                chatId,
+                "<b>Please select your preferred withdrawal method.</b>",
+                {
+                    inline_keyboard: [
+                        [{ text: "💸 Withdraw to Telebirr", callback_data: "withdraw_telebirr" }],
+                        [{ text: "💸 Withdraw to CBE Birr", callback_data: "withdraw_cbe" }]
+                    ]
+                }
+            );
         }
         else if (text === '/information' || text === '/rule' || text === '/help' || text === '/info') {
             await sendMessage(chatId, "<b>Bingo Pro Rules & Info ℹ️</b>\n\n1️⃣ <b>Join:</b> Use /play to enter the next round.\n2️⃣ <b>Deposit/Withdraw:</b> Use /deposit to add funds and /withdraw to cash out.\n3️⃣ <b>Wait:</b> Game starts once players join.\n4️⃣ <b>Win:</b> Numbers are drawn automatically. First pattern wins the Pot!\n\n💰 <b>Wallet:</b> Check /balance anytime.\n\n<i>For support, contact @BingoProSupport</i>");
