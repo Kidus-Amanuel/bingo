@@ -121,18 +121,16 @@ function LobbyContent() {
         }
     };
 
-    const handleSelectNumber = (cardId: string) => {
+    // Immediately join on card tap — modal is just a success preview
+    const handleSelectNumber = async (cardId: string) => {
+        if (!selectedGame) return;
         selectCard(cardId);
-        setPreviewOpen(true);
-    };
-
-    const handleConfirmCard = async () => {
-        if (!selectedGame || !selectedCard) return;
-        setPreviewOpen(false);
-        const success = await joinGame(selectedGame.gameId, selectedCard.id);
+        const success = await joinGame(selectedGame.gameId, cardId);
         if (success) {
-            router.push(`/game/${selectedGame.gameId}`);
+            // Open the preview modal to show the assigned card, then let user navigate
+            setPreviewOpen(true);
         } else {
+            selectCard(null);
             setError("Could not join — the card may already be taken or your balance is too low.");
         }
     };
@@ -320,21 +318,19 @@ function LobbyContent() {
                             </div>
 
                             <div className="flex flex-col items-center gap-3">
-                                <div className="px-3 py-1 bg-slate-100 rounded-full">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID: {selectedCard.id.toUpperCase()}</span>
+                                <div className="flex items-center gap-2 px-3 py-1.5 bg-green-50 border border-green-100 rounded-full">
+                                    <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
+                                    <span className="text-[10px] font-black text-green-700 uppercase tracking-widest">Card Secured! ✓</span>
                                 </div>
                                 <Button
-                                    onClick={handleConfirmCard}
+                                    onClick={() => {
+                                        setPreviewOpen(false);
+                                        if (selectedGame) router.push(`/game/${selectedGame.gameId}`);
+                                    }}
                                     className="w-full h-12 rounded-xl bg-primary-900 hover:bg-black text-white font-black text-xs uppercase tracking-[0.2em] transition-all active:scale-95 shadow-xl shadow-primary-900/20"
                                 >
-                                    CONFIRM & JOIN GAME
+                                    GO TO LIVE DRAW 🎮
                                 </Button>
-                                <button
-                                    onClick={() => setPreviewOpen(false)}
-                                    className="text-xs text-slate-400 font-bold underline underline-offset-2"
-                                >
-                                    Cancel
-                                </button>
                             </div>
                         </div>
                     )}
