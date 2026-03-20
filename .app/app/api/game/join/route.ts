@@ -52,7 +52,7 @@ export async function POST(req: Request) {
             }
         }
 
-        // 3. Perform Atomic Transaction (Deduct balance, Insert Transaction, Augment Pool, Buy Card)
+        // 3. Perform Atomic Transaction (Deduct balance, Insert into Ledger, Augment Pool, Buy Card)
         const { data: cardId, error: buyError } = await supabaseAdmin.rpc('buy_card_atomic', {
             p_user_id: userId,
             p_room_id: gameId,
@@ -64,13 +64,13 @@ export async function POST(req: Request) {
         if (buyError) {
             const msg = buyError.message || JSON.stringify(buyError);
             if (msg.includes('already_joined') || msg.includes('unique_user_per_room')) {
-               return NextResponse.json({ success: false, error: 'You already have a card in this game.' }, { status: 400 });
+                return NextResponse.json({ success: false, error: 'You already have a card in this game.' }, { status: 400 });
             }
             if (msg.includes('unique_room_card')) {
-               return NextResponse.json({ success: false, error: 'Someone else just picked this card. Please choose another.' }, { status: 400 });
+                return NextResponse.json({ success: false, error: 'Someone else just picked this card. Please choose another.' }, { status: 400 });
             }
             if (msg.includes('balance') || msg.includes('violates check constraint')) {
-               return NextResponse.json({ success: false, error: 'Insufficient balance. Please top up to continue.' }, { status: 400 });
+                return NextResponse.json({ success: false, error: 'Insufficient balance. Please top up to continue.' }, { status: 400 });
             }
             return NextResponse.json({ success: false, error: `Failed to join game: ${msg}` }, { status: 500 });
         }

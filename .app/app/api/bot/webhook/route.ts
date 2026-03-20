@@ -36,11 +36,11 @@ async function setBotCommands() {
 }
 
 async function handleDepositSMS(userId: string, telegramId: number, chatId: number, amount: number, paymentMethod: string, transactionId: string, rawMessage: string) {
-    // Check if transaction ID already exists
+    // Check if transaction ID already exists in the new unified ledger
     const { data: existingTxn } = await supabaseAdmin
-        .from('bot_transactions')
+        .from('transactions_ledger')
         .select('id')
-        .eq('transaction_id', transactionId)
+        .eq('reference_id', transactionId)
         .maybeSingle();
 
     if (existingTxn) {
@@ -48,16 +48,15 @@ async function handleDepositSMS(userId: string, telegramId: number, chatId: numb
         return;
     }
 
-    // Insert pending deposit
-    const { error } = await supabaseAdmin.from('bot_transactions').insert({
+    // Insert pending deposit into unified ledger
+    const { error } = await supabaseAdmin.from('transactions_ledger').insert({
         user_id: userId,
-        telegram_id: telegramId,
         amount: amount,
         type: 'deposit',
         payment_method: paymentMethod,
-        transaction_id: transactionId,
+        reference_id: transactionId,
         status: 'pending',
-        raw_message: rawMessage
+        metadata: { raw_message: rawMessage }
     });
 
     if (error) {
@@ -79,7 +78,7 @@ export async function POST(req: Request) {
         let username: string;
         let contact = update.message?.contact;
 
-        // Handle Callback Queries (Inline button clicks)
+        // Handle Callback Queries
         if (update.callback_query) {
             telegramId = update.callback_query.from.id;
             chatId = update.callback_query.message.chat.id;
@@ -100,14 +99,12 @@ export async function POST(req: Request) {
                 await sendMessage(chatId, "<b>💸 Withdraw to CBE Birr</b>\n\nPlease enter the amount you wish to withdraw.\n\n<i>Minimum withdrawal: 100 Birr</i>");
             }
 
-            // Answer callback query to remove loading state on button
             await fetch(`${TELEGRAM_API}/answerCallbackQuery`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ callback_query_id: update.callback_query.id })
             });
 
-            // We continue processing below to ensure profile exists, but we can return early for callbacks
             return NextResponse.json({ ok: true });
         } else if (update.message) {
             telegramId = update.message.from.id;
@@ -117,34 +114,25 @@ export async function POST(req: Request) {
             return NextResponse.json({ ok: true });
         }
 
-        if (!text && !contact) {
-            return NextResponse.json({ ok: true });
-        }
+        if (!text && !contact) return NextResponse.json({ ok: true });
+        if (!supabaseAdmin) return NextResponse.json({ ok: true });
 
-        if (!supabaseAdmin) {
-            console.error('Bot Error: supabaseAdmin is not initialized (missing service role key)');
-            await sendMessage(chatId, "⚠️ The bot is currently in maintenance mode (Configuration Error).");
-            return NextResponse.json({ ok: true });
-        }
-
-        // 1. Find or create user profile
-        let { data: profile, error: profileError } = await supabaseAdmin
+        // 1. Find or create user profile in UNIFIED 'profiles' table
+        let { data: profile } = await supabaseAdmin
             .from('profiles')
             .select('id, role, phone_number')
             .eq('telegram_id', telegramId)
             .maybeSingle();
 
-        // 1a. Handle Contact Sharing → ONLY place a profile gets created
+        // 1a. Handle Contact Sharing
         if (contact && contact.phone_number) {
             if (profile) {
-                // Existing user shared contact again → just update the phone
                 await supabaseAdmin
                     .from('profiles')
                     .update({ phone_number: contact.phone_number, username: username })
                     .eq('id', profile.id);
                 await sendMessage(chatId, "✅ <b>Phone number updated successfully!</b>");
             } else {
-                // New user — create profile with REAL phone number
                 const newId = uuidv4();
                 const { data: newProfile, error: createError } = await supabaseAdmin
                     .from('profiles')
@@ -152,28 +140,26 @@ export async function POST(req: Request) {
                         id: newId,
                         telegram_id: telegramId,
                         username: username,
-                        phone_number: contact.phone_number, // Real phone, mandatory
+                        phone_number: contact.phone_number,
                         role: 'player'
                     })
                     .select()
                     .single();
 
                 if (createError || !newProfile) {
-                    console.error('Profile Creation Error:', createError);
-                    await sendMessage(chatId, "❌ Error creating your profile. Please try again.");
+                    await sendMessage(chatId, "❌ Error creating your profile.");
                     return NextResponse.json({ ok: true });
                 }
 
-                // Initialize wallets with 10 Birr bonus
+                // Initialize unified wallet with 10 Birr bonus
                 await supabaseAdmin.from('wallets').insert({ user_id: newProfile.id, balance: 10.00 });
-                await supabaseAdmin.from('users').insert({ id: newProfile.id, telegram_id: telegramId, balance: 10.00 });
+                // We keep 'users' synced for engine legacy if needed, but primarily use wallets
                 profile = newProfile;
 
-                // Welcome message
                 await setBotCommands();
                 await sendMessage(
                     chatId,
-                    `<b>Welcome to Bingo Pro, ${username}! 🎱</b>\n\nYour registration is complete! 🎁\n\n<i>Let's start winning!</i>\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💳 /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n💰 /balance - View your wallet\nℹ️ /information - Game rules`,
+                    `<b>Welcome to Bingo Pro, ${username}! 🎱</b>\n\nYour registration is complete! 🎁\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💳 /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n💰 /balance - View your wallet`,
                     {
                         keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${newProfile.id}` } }]],
                         resize_keyboard: true
@@ -183,11 +169,10 @@ export async function POST(req: Request) {
             return NextResponse.json({ ok: true });
         }
 
-        // 1b. No profile yet → REQUIRE phone number before doing anything else
         if (!profile) {
             await sendMessage(
                 chatId,
-                "👋 <b>Welcome to Joy Bingo!</b>\n\n📱 To register and start playing, we need your phone number.\n\nPlease tap the button below to share your contact.",
+                "👋 <b>Welcome to Joy Bingo!</b>\n\n📱 To register and start playing, we need your phone number.",
                 {
                     keyboard: [[{ text: "📱 Share My Phone Number", request_contact: true }]],
                     resize_keyboard: true,
@@ -195,25 +180,9 @@ export async function POST(req: Request) {
                 }
             );
             return NextResponse.json({ ok: true });
-        } else {
-            // Ensure engine 'users' record exists for web-UI created accounts
-            const { data: engineUser } = await supabaseAdmin.from('users').select('id').eq('id', profile.id).maybeSingle();
-            if (!engineUser) {
-                const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
-                await supabaseAdmin.from('users').insert({
-                    id: profile.id,
-                    telegram_id: telegramId,
-                    balance: wallet?.balance || 0
-                });
-            }
         }
 
-        // Safety check for TypeScript
-        if (!profile) {
-            return NextResponse.json({ ok: true });
-        }
-
-        // 2. State Management for Withdrawals
+        // 2. Withdrawal Request Handling
         const { data: userState } = await supabaseAdmin
             .from('bot_user_states')
             .select('state')
@@ -222,186 +191,92 @@ export async function POST(req: Request) {
 
         if (userState && userState.state.startsWith('WAITING_WITHDRAWAL_AMOUNT') && !text.startsWith('/')) {
             const amount = parseFloat(text);
-
-            if (isNaN(amount)) {
-                await sendMessage(chatId, "⚠️ Please enter a valid number for the withdrawal amount.");
+            if (isNaN(amount) || amount < 100) {
+                await sendMessage(chatId, "⚠️ Invalid amount. Minimum withdrawal is 100 Birr.");
                 return NextResponse.json({ ok: true });
             }
 
-            if (amount < 100) {
-                await sendMessage(chatId, "⚠️ Withdraw amount must be greater than or equal to 100 Birr.");
-                return NextResponse.json({ ok: true });
-            }
-
-            // Check balance
-            const { data: wallet } = await supabaseAdmin.from('users').select('balance').eq('id', profile.id).single();
+            // Check unified balance
+            const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
             if (!wallet || wallet.balance < amount) {
-                await sendMessage(chatId, `🚫 Insufficient fund. user: ${profile.phone_number || telegramId}, amount: ${amount.toFixed(2)}`);
-                // Clear state
+                await sendMessage(chatId, `🚫 Insufficient funds. Balance: ${wallet?.balance || 0} Birr`);
                 await supabaseAdmin.from('bot_user_states').delete().eq('telegram_id', telegramId);
                 return NextResponse.json({ ok: true });
             }
 
-            // Create Pending Withdrawal
-            await supabaseAdmin.from('bot_transactions').insert({
+            // Create Pending Withdrawal in unified ledger
+            await supabaseAdmin.from('transactions_ledger').insert({
                 user_id: profile.id,
-                telegram_id: telegramId,
-                amount: amount,
+                amount: -Math.abs(amount), // Negative for ledger tracking
                 type: 'withdrawal',
-                payment_method: userState.state === 'WAITING_WITHDRAWAL_AMOUNT_TELEBIRR' ? 'telebirr' : 'cbe_birr',
+                payment_method: userState.state === 'WAITING_WITHDRAWAL_AMOUNT_TELEBIRR' ? 'telebirr' : 'cbe',
                 status: 'pending',
-                raw_message: text
+                metadata: { raw_message: text }
             });
 
             await supabaseAdmin.from('bot_user_states').delete().eq('telegram_id', telegramId);
-            await sendMessage(chatId, `✅ <b>Withdrawal Request Received</b>\n\nYour request to withdraw <b>${amount.toFixed(2)} Birr</b> via <b>${userState.state === 'WAITING_WITHDRAWAL_AMOUNT_TELEBIRR' ? 'Telebirr' : 'CBE'}</b> has been submitted to our operators.\n\nStatus: ⏳ Pending`);
+            await sendMessage(chatId, `✅ <b>Withdrawal Request Received</b>\n\nAmount: <b>${amount.toFixed(2)} Birr</b>\nStatus: ⏳ Pending Approval`);
             return NextResponse.json({ ok: true });
         }
 
-
-        // 3. Command & Message Handlers
+        // 3. Main Commands
         if (text === '/start') {
-            await setBotCommands(); // Ensure menu is always updated
-            await sendMessage(
-                chatId,
-                "<b>Welcome to the Ultimate Bingo Experience! 🎱</b>\n\nJoin thousands of players in real-time draws and win big pots instantly.\n\n<b>Commands:</b>\n🚀 /play - Join game instantly\n💳 /deposit - Top up your wallet\n💸 /withdraw - Withdraw funds\n💰 /balance - View your wallet\nℹ️ /information - Game rules",
-                {
-                    keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }]],
-                    resize_keyboard: true
-                }
-            );
+            await sendMessage(chatId, "<b>Welcome to Bingo Pro! 🎱</b>", {
+                keyboard: [[{ text: "Open Bingo App 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }]],
+                resize_keyboard: true
+            });
         }
         else if (text === '/balance') {
-            const { data: wallet } = await supabaseAdmin
-                .from('wallets')
-                .select('balance')
-                .eq('user_id', profile.id)
-                .single();
-
-            await sendMessage(chatId, `<b>Wallet Status 💰</b>\n\n👤 <b>Player:</b> ${username}\n🗄 <b>Balance:</b> <code>${wallet?.balance || 0} Birr</code>\n\n<i>Use /play to enter the next round!</i>`);
+            const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
+            await sendMessage(chatId, `<b>Wallet Status 💰</b>\n\nBalance: <code>${wallet?.balance || 0} Birr</code>`);
         }
         else if (text === '/play' || text === '/join') {
-            // 1. Find the most recent waiting room
-            const { data: game } = await supabaseAdmin
-                .from('rooms_engine')
-                .select('id, card_price, status')
-                .eq('status', 'waiting')
-                .order('created_at', { ascending: false })
-                .limit(1)
-                .maybeSingle();
-
+            const { data: game } = await supabaseAdmin.from('rooms_engine').select('id, card_price, status').eq('status', 'waiting').order('created_at', { ascending: false }).limit(1).maybeSingle();
             if (!game) {
-                await sendMessage(chatId, "<b>⚠️ No active rooms right now.</b>\n\nThe engine is spawning a new room. Please wait a moment and try again!");
+                await sendMessage(chatId, "⚠️ No active rooms. Please wait...");
                 return NextResponse.json({ ok: true });
             }
 
-            // 2. Check if already joined this room
-            const { data: existing } = await supabaseAdmin
-                .from('room_cards')
-                .select('id')
-                .eq('room_id', game.id)
-                .eq('user_id', profile.id)
-                .maybeSingle();
-
+            const { data: existing } = await supabaseAdmin.from('room_cards').select('id').eq('room_id', game.id).eq('user_id', profile.id).maybeSingle();
             if (existing) {
-                await sendMessage(
-                    chatId,
-                    "<b>You're already in! ✅</b>\n\nYour card is reserved. Open the app to watch the live draw!",
-                    {
-                        inline_keyboard: [[
-                            { text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
-                        ]]
-                    }
-                );
+                await sendMessage(chatId, "<b>You're already in! ✅</b>", {
+                    inline_keyboard: [[{ text: "Play Now 🎮", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }]]
+                });
                 return NextResponse.json({ ok: true });
             }
 
-            // 3. Check balance from wallets table (source of truth for deposits)
-            const { data: wallet } = await supabaseAdmin
-                .from('wallets')
-                .select('balance')
-                .eq('user_id', profile.id)
-                .single();
-
+            const { data: wallet } = await supabaseAdmin.from('wallets').select('balance').eq('user_id', profile.id).single();
             const betAmount = Number(game.card_price);
             if (!wallet || Number(wallet.balance) < betAmount) {
-                await sendMessage(chatId, `<b>🚫 Insufficient Funds</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet?.balance || 0} Birr</code>\n\n<i>Use /deposit to top up!</i>`);
+                await sendMessage(chatId, `<b>🚫 Insufficient Funds</b>\nEntry: ${betAmount} Birr\nBalance: ${wallet?.balance || 0} Birr`);
                 return NextResponse.json({ ok: true });
             }
 
-            // 4. Send user to lobby to pick their lucky card
-            await sendMessage(
-                chatId,
-                `<b>🎱 There's a game waiting for you!</b>\n\nEntry: <code>${betAmount} Birr</code>\nBalance: <code>${wallet.balance} Birr</code>\n\n<i>Open the lobby below, pick your lucky card, and wait for the draw!</i>`,
-                {
-                    inline_keyboard: [[
-                        { text: "Play Now 🎟", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }
-                    ]]
-                }
-            );
+            await sendMessage(chatId, `<b>🎱 Game Waiting!</b>\nEntry: ${betAmount} Birr`, {
+                inline_keyboard: [[{ text: "Open Lobby 🎟", web_app: { url: `https://bingo-app-tawny.vercel.app/lobby?userId=${profile.id}` } }]]
+            });
         }
-        else if (text === '/deposit' || text === '/deposite') {
-            await sendMessage(
-                chatId,
-                "<b>Please select the bank option you wish to use for the top-up.</b>",
-                {
-                    inline_keyboard: [
-                        [{ text: "💳 Telebirr", callback_data: "deposit_telebirr" }],
-                        [{ text: "💳 CBE Birr", callback_data: "deposit_cbe" }]
-                    ]
-                }
-            );
+        else if (text === '/deposit') {
+            await sendMessage(chatId, "<b>Select bank for top-up:</b>", {
+                inline_keyboard: [[{ text: "💳 Telebirr", callback_data: "deposit_telebirr" }], [{ text: "💳 CBE Birr", callback_data: "deposit_cbe" }]]
+            });
         }
-        else if (text === '/withdraw' || text === '/withdrawal') {
-            await sendMessage(
-                chatId,
-                "<b>Please select your preferred withdrawal method.</b>",
-                {
-                    inline_keyboard: [
-                        [{ text: "💸 Withdraw to Telebirr", callback_data: "withdraw_telebirr" }],
-                        [{ text: "💸 Withdraw to CBE Birr", callback_data: "withdraw_cbe" }]
-                    ]
-                }
-            );
-        }
-        else if (text === '/information' || text === '/rule' || text === '/help' || text === '/info') {
-            await sendMessage(chatId, "<b>Bingo Pro Rules & Info ℹ️</b>\n\n1️⃣ <b>Join:</b> Use /play to enter the next round.\n2️⃣ <b>Deposit/Withdraw:</b> Use /deposit to add funds and /withdraw to cash out.\n3️⃣ <b>Wait:</b> Game starts once players join.\n4️⃣ <b>Win:</b> Numbers are drawn automatically. First pattern wins the Pot!\n\n💰 <b>Wallet:</b> Check /balance anytime.\n\n<i>For support, contact @BingoProSupport</i>");
+        else if (text === '/withdraw') {
+            await sendMessage(chatId, "<b>Select withdrawal method:</b>", {
+                inline_keyboard: [[{ text: "💸 Telebirr", callback_data: "withdraw_telebirr" }], [{ text: "💸 CBE Birr", callback_data: "withdraw_cbe" }]]
+            });
         }
         else if (text.toLowerCase().includes("transferred") && text.toLowerCase().includes("telebirr")) {
-            // Telebirr SMS parsing: "You have transferred ETB 30.00 to mitku tasaw... Your transaction number is DC83JYBUGX..."
             const amountMatch = text.match(/ETB\s*([\d,\.]+)/i);
             const txnMatch = text.match(/transaction number is\s*([A-Za-z0-9]+)/i);
-
             if (amountMatch && txnMatch) {
-                const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-                const txnId = txnMatch[1];
-
-                await handleDepositSMS(profile.id, telegramId, chatId, amount, 'telebirr', txnId, text);
-            } else {
-                await sendMessage(chatId, "⚠️ Could not read the amount or transaction ID from your Telebirr message. Please ensure you copied the exact SMS.");
+                await handleDepositSMS(profile.id, telegramId, chatId, parseFloat(amountMatch[1].replace(/,/g, '')), 'telebirr', txnMatch[1], text);
             }
-        }
-        else if (text.toLowerCase().includes("you have sent") && text.toLowerCase().includes("cbe birr")) {
-            // CBE Birr SMS parsing: "Dear KIDUS, you have sent 5.00Br. to KIDUS AMANUEL... Txn ID DCA117UGJ0N..."
-            const amountMatch = text.match(/sent\s*([\d,\.]+)\s*Br/i);
-            const txnMatch = text.match(/Txn ID\s*([A-Za-z0-9]+)/i);
-
-            if (amountMatch && txnMatch) {
-                const amount = parseFloat(amountMatch[1].replace(/,/g, ''));
-                const txnId = txnMatch[1];
-
-                await handleDepositSMS(profile.id, telegramId, chatId, amount, 'cbe_birr', txnId, text);
-            } else {
-                await sendMessage(chatId, "⚠️ Could not read the amount or transaction ID from your CBE Birr message. Please ensure you copied the exact SMS.");
-            }
-        }
-        else if (!text.startsWith('/')) {
-            await sendMessage(chatId, "❓ Unknown message. Type /help for assistance.");
         }
 
         return NextResponse.json({ ok: true });
     } catch (err: any) {
         console.error('Webhook Error:', err);
-        return NextResponse.json({ ok: true }); // Always return 200 to Telegram
+        return NextResponse.json({ ok: true });
     }
 }
