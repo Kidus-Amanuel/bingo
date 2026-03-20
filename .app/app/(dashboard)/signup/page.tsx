@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
-import { Loader2, UserPlus, LogIn } from "lucide-react";
+import { Loader2, UserPlus, ShieldPlus, CheckCircle2 } from "lucide-react";
 import Link from "next/link";
 
 export default function SignupPage() {
@@ -24,7 +24,6 @@ export default function SignupPage() {
         setError(null);
 
         try {
-            // 1. Auth Signup
             const { data: authData, error: authError } = await supabase.auth.signUp({
                 email,
                 password,
@@ -35,17 +34,12 @@ export default function SignupPage() {
                     }
                 }
             });
-
             if (authError) throw authError;
-
             if (authData.user) {
-                // 2. Profile Creation (Triggers or Manual)
-                // The DB has a trigger on auth.users usually, but let's be explicit if needed.
-                // For now, we assume RLS allows this or a trigger handles it.
                 setSuccess(true);
             }
         } catch (err: any) {
-            setError(err.message || "Failed to sign up");
+            setError(err.message || "Registration failed. Please contact support.");
         } finally {
             setLoading(false);
         }
@@ -54,14 +48,16 @@ export default function SignupPage() {
     if (success) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-                <Card className="w-full max-w-md shadow-2xl border-none rounded-[2rem] text-center p-8">
-                    <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6 text-green-600">
-                        <UserPlus className="w-10 h-10" />
+                <Card className="w-full max-w-md shadow-xl border-slate-200 rounded-xl text-center p-10 bg-white">
+                    <div className="w-16 h-16 bg-emerald-50 rounded-full flex items-center justify-center mx-auto mb-6 text-emerald-600 border border-emerald-100">
+                        <CheckCircle2 className="w-8 h-8" />
                     </div>
-                    <CardTitle className="text-2xl font-black mb-2">Check your email</CardTitle>
-                    <p className="text-slate-500 font-bold mb-8">We've sent a verification link to {email}.</p>
-                    <Button onClick={() => router.push("/login")} className="w-full h-12 rounded-xl bg-primary-900 font-black uppercase">
-                        Go to Login
+                    <CardTitle className="text-xl font-bold text-slate-900 mb-2">Registration Pending</CardTitle>
+                    <p className="text-sm text-slate-500 font-medium mb-8 leading-relaxed">
+                        We've sent a verification link to <span className="text-slate-900 font-bold">{email}</span>. Please verify your email to access the dashboard.
+                    </p>
+                    <Button onClick={() => router.push("/login")} className="w-full h-11 rounded-lg bg-indigo-600 hover:bg-indigo-700 font-bold">
+                        Return to Login
                     </Button>
                 </Card>
             </div>
@@ -70,67 +66,73 @@ export default function SignupPage() {
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-50 p-4">
-            <Card className="w-full max-w-md shadow-2xl border-none rounded-[2rem] overflow-hidden">
-                <CardHeader className="bg-primary-950 text-white space-y-1 py-8 text-center">
-                    <CardTitle className="text-3xl font-black uppercase italic tracking-tight">Create Account</CardTitle>
-                    <CardDescription className="text-primary-100/60 font-bold uppercase text-[10px] tracking-widest">
-                        Bingo Operator Portal
+            <div className="absolute top-0 left-0 w-full h-1 bg-indigo-600/50" />
+            
+            <Card className="w-full max-w-md shadow-xl border-slate-200 rounded-xl overflow-hidden bg-white">
+                <CardHeader className="space-y-2 pt-10 pb-6 text-center">
+                    <div className="mx-auto w-12 h-12 bg-indigo-50 rounded-xl flex items-center justify-center mb-2">
+                        <ShieldPlus className="text-indigo-600 w-7 h-7" />
+                    </div>
+                    <CardTitle className="text-2xl font-bold text-slate-900 tracking-tight">Create Operator Access</CardTitle>
+                    <CardDescription className="text-sm font-medium text-slate-500 px-4">
+                        Request administrative access to the Bingo platform.
                     </CardDescription>
                 </CardHeader>
-                <CardContent className="pt-8 space-y-4">
+                <CardContent className="space-y-4 px-8 pt-2">
                     {error && (
-                        <div className="p-3 bg-red-50 border border-red-100 text-red-600 rounded-xl text-xs font-bold text-center">
+                        <div className="p-3 bg-rose-50 border border-rose-100 text-rose-600 rounded-lg text-xs font-semibold text-center">
                             {error}
                         </div>
                     )}
                     <form onSubmit={handleSignup} className="space-y-4">
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Full Name</label>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-slate-400 ml-0.5">Operator Name</label>
                             <Input
-                                placeholder="Admin Name"
+                                placeholder="e.g. Amanuel"
                                 value={username}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setUsername(e.target.value)}
                                 required
-                                className="h-12 rounded-xl border-slate-100 placeholder:text-slate-300"
+                                className="h-11 rounded-lg border-slate-200 focus:ring-indigo-500"
                             />
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Email Address</label>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-slate-400 ml-0.5">Work Email</label>
                             <Input
                                 type="email"
-                                placeholder="name@company.com"
+                                placeholder="operator@bingo.app"
                                 value={email}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setEmail(e.target.value)}
                                 required
-                                className="h-12 rounded-xl border-slate-100"
+                                className="h-11 rounded-lg border-slate-200 focus:ring-indigo-500"
                             />
                         </div>
-                        <div className="space-y-1.5">
-                            <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-1">Password</label>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold uppercase tracking-widest text-slate-400 ml-0.5">Password</label>
                             <Input
                                 type="password"
-                                placeholder="Minimum 6 characters"
+                                placeholder="••••••••"
                                 value={password}
                                 onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPassword(e.target.value)}
                                 required
                                 minLength={6}
-                                className="h-12 rounded-xl border-slate-100"
+                                className="h-11 rounded-lg border-slate-200 focus:ring-indigo-500"
                             />
+                            <p className="text-[10px] text-slate-400 font-medium ml-0.5">Minimum 6 characters required.</p>
                         </div>
                         <Button
                             type="submit"
                             disabled={loading}
-                            className="w-full h-12 rounded-xl bg-primary-900 hover:bg-black font-black text-sm transition-all"
+                            className="w-full h-11 rounded-lg bg-indigo-600 hover:bg-indigo-700 font-bold text-sm shadow-sm transition-all mt-4"
                         >
-                            {loading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
-                            CREATE ACCESS REQUEST
+                            {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <UserPlus className="w-4 h-4 mr-2" />}
+                            Request Access
                         </Button>
                     </form>
                 </CardContent>
-                <CardFooter className="flex flex-col gap-4 pb-8 border-t border-slate-50 pt-6 mt-4">
-                    <p className="text-xs text-slate-400 font-bold">
-                        Already have an account?{" "}
-                        <Link href="/login" className="text-primary-600 hover:underline">
+                <CardFooter className="flex flex-col gap-4 pb-10 pt-4 text-center">
+                    <p className="text-sm text-slate-500 font-medium">
+                        Already have access?{" "}
+                        <Link href="/login" className="text-indigo-600 font-bold hover:underline">
                             Sign In
                         </Link>
                     </p>
