@@ -23,6 +23,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 export default function FinancesPage() {
     const [finance, setFinance] = useState<any>(null);
@@ -88,6 +89,28 @@ export default function FinancesPage() {
 
     return (
         <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Sub Navigation */}
+            <div className="flex items-center gap-1 border-b border-slate-200">
+                <Link 
+                    href="/dashboard/finances" 
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-indigo-600 border-b-2 border-indigo-600 transition-all"
+                >
+                    Overview
+                </Link>
+                <Link 
+                    href="/dashboard/finances/deposits" 
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
+                >
+                    Deposits
+                </Link>
+                <Link 
+                    href="/dashboard/finances/withdrawals" 
+                    className="px-4 py-2 text-xs font-bold uppercase tracking-widest text-slate-400 hover:text-slate-600 transition-all"
+                >
+                    Withdrawals
+                </Link>
+            </div>
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
