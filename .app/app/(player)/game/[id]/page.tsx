@@ -184,6 +184,10 @@ function GameContent() {
                                 ? new Date(payload.new.start_time).getTime()
                                 : undefined,
                         });
+                        
+                        if (payload.new.status === 'finished') {
+                            setIsWinnerPopupOpen(true);
+                        }
                     }
                 }
             )
