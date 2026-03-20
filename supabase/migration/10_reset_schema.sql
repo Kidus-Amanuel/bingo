@@ -192,7 +192,7 @@ BEGIN
 
     -- 2. Log 'completed' bet in ledger
     INSERT INTO public.transactions_ledger (user_id, amount, type, status, reference_id)
-    VALUES (p_user_id, -p_price, 'bet', 'completed', p_room_id::text);
+    VALUES (p_user_id, -p_price, 'bet', 'completed', 'bet:' || p_room_id::text || ':' || p_user_id::text);
 
     -- 3. Add to Room Pool
     UPDATE public.rooms_engine SET pool = pool + p_price WHERE id = p_room_id;
@@ -232,7 +232,7 @@ BEGIN
     -- 2. Update Finance
     UPDATE public.wallets SET balance = balance + v_reward WHERE user_id = p_user_id;
     INSERT INTO public.transactions_ledger (user_id, amount, type, status, reference_id)
-    VALUES (p_user_id, v_reward, 'win', 'completed', p_room_id::text);
+    VALUES (p_user_id, v_reward, 'win', 'completed', 'win:' || p_room_id::text || ':' || p_user_id::text);
 
     -- 3. Mark Winners & Close Room
     INSERT INTO public.game_winners (room_id, user_id, card_id, position) VALUES (p_room_id, p_user_id, p_card_id, 1);

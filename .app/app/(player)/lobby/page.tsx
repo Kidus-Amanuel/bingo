@@ -124,15 +124,7 @@ function LobbyContent() {
         }
     };
 
-    const getTransposedNumbers = (numbers: (number | "FREE")[][]) => {
-        const transposed = [[], [], [], [], []] as (number | "FREE")[][];
-        for (let r = 0; r < 5; r++) {
-            for (let c = 0; c < 5; c++) {
-                transposed[r][c] = numbers[c][r];
-            }
-        }
-        return transposed;
-    };
+
 
     const currentGameData = localGames.find(g => g.gameId === selectedGame?.gameId);
 
@@ -305,7 +297,7 @@ function LobbyContent() {
                                 </div>
 
                                 <div className="grid grid-cols-5 gap-1.5 aspect-square w-full">
-                                    {getTransposedNumbers(currentGame.selectedCard.numbers).map((row, rIdx) =>
+                                    {currentGame.selectedCard.numbers.map((row, rIdx) =>
                                         row.map((num, cIdx) => (
                                             <div
                                                 key={`${rIdx}-${cIdx}`}
