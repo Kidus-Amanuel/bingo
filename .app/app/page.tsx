@@ -35,7 +35,7 @@ export default function Home() {
                     </p>
 
                     <div className="flex flex-wrap items-center justify-center gap-4 pt-4">
-                        <Link href="/lobby">
+                        <Link href="/">
                             <Button size="lg" className="h-14 px-10 text-lg font-bold bg-secondary-500 hover:bg-secondary-600 text-secondary-900 border-none rounded-xl shadow-xl hover:scale-105 transition-all group">
                                 Join Game <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </Button>

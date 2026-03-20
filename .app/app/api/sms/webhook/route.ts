@@ -52,17 +52,17 @@ export async function POST(req: Request) {
             type = 'cbe';
             const txnMatch = message.match(/Txn ID\s*([A-Za-z0-9]+)/i);
             const amtMatch = message.match(/([\d,\.]+)\s*Br/i);
-            
+
             if (txnMatch) transactionId = txnMatch[1];
             if (amtMatch) amount = parseFloat(amtMatch[1].replace(/,/g, ''));
-        } 
+        }
         // --- 2. Telebirr Parser ---
         // Example: ... ETB 50.00 ... transaction number is ABC123XYZ
         else if (message.toLowerCase().includes('telebirr') || message.toLowerCase().includes('transferred')) {
             type = 'telebirr';
             const txnMatch = message.match(/transaction number is\s*([A-Za-z0-9]+)/i);
             const amtMatch = message.match(/ETB\s*([\d,\.]+)/i);
-            
+
             if (txnMatch) transactionId = txnMatch[1];
             if (amtMatch) amount = parseFloat(amtMatch[1].replace(/,/g, ''));
         }
@@ -112,12 +112,12 @@ export async function POST(req: Request) {
             await sendTelegramMessage(telegramId, successMsg);
         }
 
-        return NextResponse.json({ 
-            success: true, 
-            message: 'Transaction approved', 
-            transactionId, 
-            amount, 
-            type 
+        return NextResponse.json({
+            success: true,
+            message: 'Transaction approved',
+            transactionId,
+            amount,
+            type
         });
 
     } catch (err: any) {
