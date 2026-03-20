@@ -40,9 +40,11 @@ export default function Home() {
                                 Join Game <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                             </Button>
                         </Link>
-                        <Button size="lg" variant="outline" className="h-14 px-10 text-lg font-bold bg-white/10 backdrop-blur-md border-white/40 hover:bg-white/20 text-white rounded-xl shadow-xl">
-                            View Dashboard
-                        </Button>
+                        <Link href="/login">
+                            <Button size="lg" variant="outline" className="h-14 px-10 text-lg font-bold bg-white/10 backdrop-blur-md border-white/40 hover:bg-white/20 text-white rounded-xl shadow-xl">
+                                View Dashboard
+                            </Button>
+                        </Link>
                     </div>
                 </div>
             </section>
