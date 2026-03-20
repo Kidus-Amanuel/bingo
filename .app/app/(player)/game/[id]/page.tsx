@@ -221,20 +221,33 @@ function GameContent() {
                 setIsConnected(status === 'SUBSCRIBED');
             });
 
-        // ── Polling fallback: re-sync called numbers every 5s ─────────────
-        // Ensures the state stays consistent even if a realtime event is missed.
+        // ── Polling fallback: re-sync state every 5s ─────────────────────
         const poll = setInterval(async () => {
-            const { data } = await supabase
+            // 1. Sync called numbers
+            const { data: calls } = await supabase
                 .from('called_numbers')
                 .select('number')
                 .eq('room_id', gameId)
                 .order('called_at', { ascending: true });
-            if (data) {
-                const nums = data.map((c: any) => c.number);
-                // Only update if there are new numbers we haven't seen
+            
+            if (calls) {
+                const nums = calls.map((c: any) => c.number);
                 const current = numbersRef.current;
                 const hasNew = nums.some((n: number) => !current.includes(n));
                 if (hasNew) setCalledNumbers(nums);
+            }
+
+            // 2. Sync room status
+            const { data: room } = await supabase
+                .from('rooms_engine')
+                .select('status, pool, start_time')
+                .eq('id', gameId)
+                .single();
+
+            if (room && room.status === 'finished') {
+                // If room is finished but popup is not open, trigger it
+                // We'll also need winner details, but the popup fetches them itself
+                setIsWinnerPopupOpen(true);
             }
         }, 5000);
 
