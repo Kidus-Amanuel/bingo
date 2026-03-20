@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { useRouter, usePathname } from "next/navigation";
-import { 
-    LayoutDashboard, 
-    Gamepad2, 
-    Wallet, 
-    ArrowUpFromLine, 
-    Settings, 
+import {
+    LayoutDashboard,
+    Gamepad2,
+    Wallet,
+    ArrowUpFromLine,
+    ArrowDownToLine,
+    Settings,
     LogOut,
     Menu,
     X,
@@ -27,6 +28,7 @@ const NAV_ITEMS = [
     { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
     { label: "Games Control", href: "/dashboard/games", icon: Gamepad2 },
     { label: "Financial Hub", href: "/dashboard/finances", icon: Wallet },
+    { label: "Deposits", href: "/dashboard/deposites", icon: ArrowDownToLine },
     { label: "Withdrawals", href: "/dashboard/withdrawals", icon: ArrowUpFromLine },
 ];
 
@@ -35,14 +37,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     const [user, setUser] = useState<any>(null);
     const [role, setRole] = useState<string | null>(null);
     const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-    
+
     const router = useRouter();
     const pathname = usePathname();
 
     useEffect(() => {
         const checkAuth = async () => {
             const { data: { session } } = await supabase.auth.getSession();
-            
+
             if (!session) {
                 if (pathname !== "/login" && pathname !== "/signup") {
                     router.push("/login");
@@ -58,7 +60,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 .select("role")
                 .eq("id", session.user.id)
                 .single();
-            
+
             if (profile) {
                 setRole(profile.role);
                 if (profile.role === "player") {
@@ -91,7 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     return (
         <div className="min-h-screen bg-slate-50 flex font-sans antialiased text-slate-900">
-            
+
             {/* 🏰 Desktop Sidebar */}
             <aside className={cn(
                 "fixed inset-y-0 left-0 z-50 w-64 bg-slate-900 text-white transform transition-transform duration-300 md:relative md:translate-x-0 border-r border-slate-800",
@@ -114,14 +116,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                         {NAV_ITEMS.map((item) => {
                             const isActive = pathname === item.href;
                             return (
-                                <Link 
-                                    key={item.href} 
+                                <Link
+                                    key={item.href}
                                     href={item.href}
                                     onClick={() => setIsSidebarOpen(false)}
                                     className={cn(
                                         "flex items-center gap-3 px-3 py-2 rounded-md text-sm font-medium transition-colors",
-                                        isActive 
-                                            ? "bg-slate-800 text-white shadow-sm" 
+                                        isActive
+                                            ? "bg-slate-800 text-white shadow-sm"
                                             : "text-slate-400 hover:text-white hover:bg-slate-800/50"
                                     )}
                                 >
@@ -144,7 +146,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                                     <span className="text-[10px] text-slate-500 uppercase font-medium">{role || 'Operator'}</span>
                                 </div>
                             </div>
-                            <button 
+                            <button
                                 onClick={handleLogout}
                                 className="w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-slate-400 hover:text-white hover:bg-slate-700 rounded-md transition-all"
                             >
@@ -158,7 +160,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* 🍱 Main Content */}
             <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
-                
+
                 {/* Top Header */}
                 <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 md:px-8 sticky top-0 z-40">
                     <div className="flex items-center gap-4">
@@ -175,9 +177,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                     <div className="flex items-center gap-3">
                         <div className="relative hidden lg:block">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                            <input 
-                                type="text" 
-                                placeholder="Search everything..." 
+                            <input
+                                type="text"
+                                placeholder="Search everything..."
                                 className="h-9 w-64 pl-10 pr-4 bg-slate-50 border border-slate-200 rounded-lg text-xs font-medium focus:ring-1 focus:ring-primary-500 focus:bg-white outline-none transition-all"
                             />
                         </div>
@@ -206,7 +208,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
             {/* Overlay */}
             {isSidebarOpen && (
-                <div 
+                <div
                     className="fixed inset-0 bg-slate-900/50 z-40 md:hidden backdrop-blur-sm transition-opacity"
                     onClick={() => setIsSidebarOpen(false)}
                 />

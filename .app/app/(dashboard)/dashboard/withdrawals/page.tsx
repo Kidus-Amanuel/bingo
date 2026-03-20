@@ -30,7 +30,7 @@ export default function WithdrawalsPage() {
     const fetchRequests = async () => {
         const { data, error } = await supabase
             .from("withdrawal_requests")
-            .select("*")
+            .select("*, profiles(phone_number)")
             .order("created_at", { ascending: false });
 
         if (!error) setRequests(data || []);
@@ -139,7 +139,7 @@ export default function WithdrawalsPage() {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <div className="text-[11px] font-bold text-slate-900 mb-0.5">{request.account_number || "---"}</div>
+                                        <div className="text-[11px] font-bold text-slate-900 mb-0.5">{request.profiles?.phone_number || request.account_number || "---"}</div>
                                         <div className="text-[10px] text-slate-400 truncate max-w-[140px] leading-tight capitalize">{request.account_name?.toLowerCase() || "unnamed account"}</div>
                                     </td>
                                     <td className="px-6 py-4">
