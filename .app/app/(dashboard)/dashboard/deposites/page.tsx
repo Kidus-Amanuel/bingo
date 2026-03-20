@@ -1,7 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase";
+import { useEffect, useState, useCallback } from "react";
 import { 
     ArrowDownToLine, 
     CheckCircle2, 
@@ -19,48 +18,37 @@ import {
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { supabase } from "@/lib/supabase";
 import { cn } from "@/lib/utils";
 
-type TabType = "pending" | "all";
+type StatusFilter = "all" | "pending" | "approved" | "rejected";
+type ProviderFilter = "all" | "telebirr" | "cbe";
 
 export default function DepositVerificationPage() {
     const [deposits, setDeposits] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
-    const [processingId, setProcessingId] = useState<string | null>(null);
-    const [activeTab, setActiveTab] = useState<TabType>("pending");
     const [refreshing, setRefreshing] = useState(false);
+    const [processingId, setProcessingId] = useState<string | null>(null);
+    const [statusFilter, setStatusFilter] = useState<StatusFilter>("pending");
+    const [providerFilter, setProviderFilter] = useState<ProviderFilter>("all");
 
-    const fetchDeposits = async (showRefresh = false) => {
+    const fetchDeposits = useCallback(async (showRefresh = false) => {
         if (showRefresh) setRefreshing(true);
 
-        const query = supabase
-            .from("transactions_ledger")
-            .select("*, profiles(username, phone_number, telegram_id)")
-            .eq('type', 'deposit')
-            .order("created_at", { ascending: false });
+        const params = new URLSearchParams({ type: 'deposit' });
+        if (statusFilter !== 'all') params.append('status', statusFilter);
+        if (providerFilter !== 'all') params.append('provider', providerFilter);
 
-        const { data, error } = await query;
-
-        if (!error) setDeposits(data || []);
+        const res = await fetch(`/api/ledger?${params.toString()}`);
+        const json = await res.json();
+        setDeposits(json.data || []);
         setLoading(false);
         if (showRefresh) setRefreshing(false);
-    };
+    }, [statusFilter, providerFilter]);
 
     useEffect(() => {
         fetchDeposits();
-
-        const channel = supabase
-            .channel('deposits-realtime')
-            .on('postgres_changes', { 
-                event: '*', 
-                schema: 'public', 
-                table: 'transactions_ledger',
-                filter: "type=eq.deposit"
-            }, () => fetchDeposits())
-            .subscribe();
-
-        return () => { supabase.removeChannel(channel); };
-    }, []);
+    }, [fetchDeposits]);
 
     const handleAction = async (id: string, status: 'approved' | 'rejected') => {
         setProcessingId(id);
@@ -78,13 +66,10 @@ export default function DepositVerificationPage() {
         }
     };
 
-    const pending = deposits.filter(d => d.status === 'pending');
-    const displayed = activeTab === 'pending' ? pending : deposits;
-
     if (loading) return (
         <div className="space-y-4 pt-12 text-center">
             <Loader2 className="w-8 h-8 animate-spin text-indigo-500 mx-auto" />
-            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading deposit queue...</p>
+            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Loading deposits...</p>
         </div>
     );
 
@@ -98,29 +83,21 @@ export default function DepositVerificationPage() {
                         <h1 className="text-xl font-bold text-slate-900 tracking-tight">Deposits</h1>
                     </div>
                     <p className="text-sm text-slate-500 font-medium">
-                        SMS-forwarded deposits are auto-processed. Bot submissions await manual approval.
+                        SMS-forwarded deposits auto-confirm. Bot submissions need manual approval.
                     </p>
                 </div>
-                <div className="flex items-center gap-2">
-                    {pending.length > 0 && (
-                        <Badge variant="outline" className="h-9 px-3 gap-2 border-amber-100 bg-amber-50 text-amber-700 font-bold uppercase tracking-widest text-[10px]">
-                            <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
-                            {pending.length} Needs Approval
-                        </Badge>
-                    )}
-                    <Button 
-                        variant="outline" size="sm" 
-                        className="h-9 gap-2 font-semibold text-slate-600"
-                        onClick={() => fetchDeposits(true)}
-                        disabled={refreshing}
-                    >
-                        <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
-                        Refresh
-                    </Button>
-                </div>
+                <Button
+                    variant="outline" size="sm"
+                    className="h-9 gap-2 font-semibold text-slate-600 self-start"
+                    onClick={() => fetchDeposits(true)}
+                    disabled={refreshing}
+                >
+                    <RefreshCw size={14} className={refreshing ? "animate-spin" : ""} />
+                    Refresh
+                </Button>
             </div>
 
-            {/* How it Works Banner */}
+            {/* Info Banners */}
             <div className="grid md:grid-cols-2 gap-3">
                 <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-xl p-4">
                     <div className="w-8 h-8 rounded-lg bg-indigo-600 flex items-center justify-center text-white shrink-0">
@@ -129,7 +106,7 @@ export default function DepositVerificationPage() {
                     <div>
                         <p className="text-xs font-bold text-indigo-800 mb-0.5">Automatic via SMS Forwarder</p>
                         <p className="text-[11px] text-indigo-600 leading-relaxed">
-                            Your SMS forwarder app receives Telebirr/CBE payment notifications and auto-approves matching pending deposits instantly.
+                            Your SMS forwarder receives Telebirr/CBE notifications and auto-approves matching deposits instantly.
                         </p>
                     </div>
                 </div>
@@ -140,56 +117,64 @@ export default function DepositVerificationPage() {
                     <div>
                         <p className="text-xs font-bold text-amber-800 mb-0.5">Manual via Telegram Bot</p>
                         <p className="text-[11px] text-amber-700 leading-relaxed">
-                            Players paste their payment SMS into the bot. The deposit lands here as "pending" for you to verify and confirm.
+                            Players paste SMS into the bot. Lands here as "pending" — verify the balance and approve manually.
                         </p>
                     </div>
                 </div>
             </div>
 
-            {/* Tabs */}
-            <div className="flex items-center gap-1 border-b border-slate-200">
-                <button
-                    onClick={() => setActiveTab('pending')}
-                    className={cn(
-                        "px-4 py-2.5 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2",
-                        activeTab === 'pending'
-                            ? "text-amber-600 border-b-2 border-amber-500"
-                            : "text-slate-400 hover:text-slate-600"
-                    )}
-                >
-                    <Clock size={12} />
-                    Pending Approval
-                    {pending.length > 0 && (
-                        <span className="bg-amber-500 text-white text-[9px] font-black rounded-full px-1.5 py-0.5 leading-none">
-                            {pending.length}
-                        </span>
-                    )}
-                </button>
-                <button
-                    onClick={() => setActiveTab('all')}
-                    className={cn(
-                        "px-4 py-2.5 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-2",
-                        activeTab === 'all'
-                            ? "text-indigo-600 border-b-2 border-indigo-600"
-                            : "text-slate-400 hover:text-slate-600"
-                    )}
-                >
-                    All Deposits
-                    <span className="text-[9px] font-black bg-slate-100 text-slate-500 rounded-full px-1.5 py-0.5 leading-none">
-                        {deposits.length}
-                    </span>
-                </button>
+            {/* Filters */}
+            <div className="flex flex-wrap gap-3 items-center bg-white border border-slate-200 rounded-xl p-3 shadow-sm">
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Status</span>
+                    {(["all", "pending", "approved", "rejected"] as StatusFilter[]).map((s) => (
+                        <button
+                            key={s}
+                            onClick={() => setStatusFilter(s)}
+                            className={cn(
+                                "px-3 h-7 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+                                statusFilter === s
+                                    ? s === 'pending' ? "bg-amber-500 text-white"
+                                        : s === 'approved' ? "bg-emerald-600 text-white"
+                                        : s === 'rejected' ? "bg-rose-600 text-white"
+                                        : "bg-indigo-600 text-white"
+                                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            )}
+                        >
+                            {s}
+                        </button>
+                    ))}
+                </div>
+                <div className="w-px h-5 bg-slate-200 hidden md:block" />
+                <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mr-1">Provider</span>
+                    {(["all", "telebirr", "cbe"] as ProviderFilter[]).map((p) => (
+                        <button
+                            key={p}
+                            onClick={() => setProviderFilter(p)}
+                            className={cn(
+                                "px-3 h-7 rounded-lg text-[10px] font-bold uppercase tracking-widest transition-all",
+                                providerFilter === p
+                                    ? "bg-slate-800 text-white"
+                                    : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                            )}
+                        >
+                            {p === 'cbe' ? 'CBE Birr' : p}
+                        </button>
+                    ))}
+                </div>
+                <span className="ml-auto text-[10px] text-slate-400 font-bold">{deposits.length} results</span>
             </div>
 
             {/* Deposit Cards */}
             <div className="grid grid-cols-1 gap-4">
-                {displayed.map((deposit) => {
-                    const isAutoApproved = deposit.status !== 'pending';
+                {deposits.map((deposit) => {
                     const isPending = deposit.status === 'pending';
+                    const isAuto = deposit.status !== 'pending';
 
                     return (
-                        <Card 
-                            key={deposit.id} 
+                        <Card
+                            key={deposit.id}
                             className={cn(
                                 "border shadow-sm hover:shadow-md transition-shadow rounded-xl overflow-hidden bg-white",
                                 isPending ? "border-amber-200" : "border-slate-200"
@@ -197,10 +182,12 @@ export default function DepositVerificationPage() {
                         >
                             <div className={cn(
                                 "border-l-4",
-                                isPending ? "border-amber-500" : deposit.status === 'approved' ? "border-emerald-500" : "border-rose-500"
+                                isPending ? "border-amber-500"
+                                    : deposit.status === 'approved' ? "border-emerald-500"
+                                    : "border-rose-500"
                             )}>
                                 <div className="flex flex-col lg:flex-row">
-                                    {/* Left: Player & Amount */}
+                                    {/* Player & Amount */}
                                     <div className="p-5 lg:w-1/3 border-b lg:border-b-0 lg:border-r border-slate-100 bg-slate-50/30">
                                         <div className="flex items-start justify-between mb-4">
                                             <div className="flex items-center gap-3">
@@ -209,7 +196,7 @@ export default function DepositVerificationPage() {
                                                 </div>
                                                 <div>
                                                     <div className="text-sm font-bold text-slate-900">@{deposit.profiles?.username || 'unknown'}</div>
-                                                    <div className="text-[10px] font-mono text-slate-400">#{deposit.id.substring(0,8)}</div>
+                                                    <div className="text-[10px] font-mono text-slate-400">#{deposit.id.substring(0, 8)}</div>
                                                 </div>
                                             </div>
                                             <div className="flex flex-col items-end gap-1">
@@ -217,14 +204,13 @@ export default function DepositVerificationPage() {
                                                     "text-[9px] uppercase font-bold px-2 py-0 h-5",
                                                     deposit.payment_method === 'telebirr' ? "bg-indigo-600" : "bg-amber-600"
                                                 )}>
-                                                    {deposit.payment_method}
+                                                    {deposit.payment_method || '—'}
                                                 </Badge>
-                                                {/* Source Tag */}
                                                 <Badge variant="outline" className={cn(
                                                     "text-[8px] uppercase font-bold px-1.5 py-0 h-4",
-                                                    isAutoApproved ? "border-emerald-100 text-emerald-600 bg-emerald-50" : "border-amber-100 text-amber-600 bg-amber-50"
+                                                    isAuto ? "border-emerald-100 text-emerald-600 bg-emerald-50" : "border-amber-100 text-amber-600 bg-amber-50"
                                                 )}>
-                                                    {isAutoApproved ? <><Zap size={8} className="mr-0.5 inline" />Auto</> : <><Hand size={8} className="mr-0.5 inline" />Manual</>}
+                                                    {isAuto ? <><Zap size={8} className="mr-0.5 inline" />Auto</> : <><Hand size={8} className="mr-0.5 inline" />Manual</>}
                                                 </Badge>
                                             </div>
                                         </div>
@@ -237,7 +223,7 @@ export default function DepositVerificationPage() {
                                         </div>
                                     </div>
 
-                                    {/* Middle: Context */}
+                                    {/* Context */}
                                     <div className="p-5 lg:flex-1 space-y-3">
                                         <div className="grid grid-cols-2 gap-4">
                                             <div>
@@ -259,7 +245,7 @@ export default function DepositVerificationPage() {
                                         {deposit.metadata?.raw_message && (
                                             <div className="p-3 bg-slate-50 rounded-lg border border-slate-100 flex gap-2.5">
                                                 <MessageSquare size={14} className="text-slate-300 shrink-0 mt-0.5" />
-                                                <p className="text-[11px] text-slate-500 leading-relaxed italic line-clamp-2">
+                                                <p className="text-[11px] text-slate-500 leading-relaxed italic">
                                                     "{deposit.metadata.raw_message}"
                                                 </p>
                                             </div>
@@ -271,22 +257,21 @@ export default function DepositVerificationPage() {
                                         </div>
                                     </div>
 
-                                    {/* Right: Action or Status */}
+                                    {/* Actions */}
                                     <div className="p-5 lg:w-44 flex lg:flex-col items-center justify-center gap-2.5 bg-slate-50/50 border-t lg:border-t-0 lg:border-l border-slate-100">
                                         {isPending ? (
                                             <>
-                                                <Button 
+                                                <Button
                                                     onClick={() => handleAction(deposit.id, 'approved')}
                                                     disabled={!!processingId}
                                                     className="w-full h-10 bg-indigo-600 hover:bg-indigo-700 font-bold text-xs gap-1.5 shadow-sm"
                                                 >
                                                     {processingId === deposit.id
                                                         ? <Loader2 size={13} className="animate-spin" />
-                                                        : <Check size={13} />
-                                                    }
+                                                        : <Check size={13} />}
                                                     Approve
                                                 </Button>
-                                                <Button 
+                                                <Button
                                                     variant="outline"
                                                     onClick={() => handleAction(deposit.id, 'rejected')}
                                                     disabled={!!processingId}
@@ -304,8 +289,7 @@ export default function DepositVerificationPage() {
                                                 )}>
                                                     {deposit.status === 'approved'
                                                         ? <CheckCircle2 size={20} className="text-emerald-500" />
-                                                        : <X size={20} className="text-rose-500" />
-                                                    }
+                                                        : <X size={20} className="text-rose-500" />}
                                                 </div>
                                                 <div className={cn(
                                                     "text-[10px] font-bold uppercase tracking-widest",
@@ -322,19 +306,15 @@ export default function DepositVerificationPage() {
                     );
                 })}
 
-                {displayed.length === 0 && (
+                {deposits.length === 0 && (
                     <div className="py-28 text-center border border-dashed border-slate-200 rounded-2xl bg-white">
                         <div className="w-14 h-14 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
                             <CheckCircle2 size={28} className="text-slate-200" />
                         </div>
                         <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">
-                            {activeTab === 'pending' ? 'No Pending Deposits' : 'No Deposits Yet'}
+                            No deposits found
                         </h3>
-                        <p className="text-xs text-slate-400 mt-1">
-                            {activeTab === 'pending'
-                                ? 'All deposits have been processed. Great work!'
-                                : 'Deposits will appear here once players top up.'}
-                        </p>
+                        <p className="text-xs text-slate-400 mt-1">Try adjusting your status or provider filter.</p>
                     </div>
                 )}
             </div>
