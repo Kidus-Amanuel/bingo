@@ -61,7 +61,7 @@ function flatToGrid(nums: number[]): (number | 'FREE')[][] {
 // ─── Main Page ───────────────────────────────────────────────────────────────
 function GameContent() {
     const params = useParams<{ id: string }>();
-    const { currentGame, leaveGame, balance, userId, setCurrentGame } = useGameStore();
+    const { currentGame, leaveGame, balance, userId, setCurrentGame, fetchGames } = useGameStore();
     const router = useRouter();
     const searchParams = useSearchParams();
 
@@ -74,6 +74,7 @@ function GameContent() {
     const [timeLeft, setTimeLeft] = useState<number | null>(null);
     const [newlyCalledNumber, setNewlyCalledNumber] = useState<number | null>(null);
     const [isConnected, setIsConnected] = useState(false);
+    const [popupCountdown, setPopupCountdown] = useState(8);
 
     const numbersRef = useRef(calledNumbers);
     useEffect(() => { numbersRef.current = calledNumbers; }, [calledNumbers]);
@@ -302,6 +303,26 @@ function GameContent() {
             setIsValidating(false);
         }
     };
+    
+    // ── 5. Popup Countdown & Redirect ───────────────────────────────────
+    useEffect(() => {
+        let timer: NodeJS.Timeout;
+        if (isWinnerPopupOpen && popupCountdown > 0) {
+            timer = setInterval(() => {
+                setPopupCountdown(prev => prev - 1);
+            }, 1000);
+        } else if (isWinnerPopupOpen && popupCountdown === 0) {
+            handleRedirect();
+        }
+        return () => clearInterval(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isWinnerPopupOpen, popupCountdown]);
+
+    const handleRedirect = () => {
+        leaveGame();
+        fetchGames();
+        router.push("/lobby");
+    };
 
     // ── Derived Values ────────────────────────────────────────────────────
     const latestNum = calledNumbers[calledNumbers.length - 1];
@@ -505,6 +526,8 @@ function GameContent() {
                 winnerName={winnerDetails?.name}
                 gameId={gameId}
                 calledNumbers={calledNumbers}
+                countdown={popupCountdown}
+                onRedirect={handleRedirect}
             />
         </div>
     );

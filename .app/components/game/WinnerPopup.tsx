@@ -28,6 +28,8 @@ interface WinnerPopupProps {
     winnerName?: string;
     gameId?: string;
     calledNumbers?: number[];
+    countdown: number;
+    onRedirect: () => void;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -134,12 +136,10 @@ function WinnerCard({ winner, calledNumbers }: { winner: WinnerInfo; calledNumbe
 }
 
 // ── Main Popup ────────────────────────────────────────────────────────────────
-export function WinnerPopup({ isOpen, prize, isWinner, winnerName, gameId, calledNumbers = [] }: WinnerPopupProps) {
-    const router = useRouter();
-    const [countdown, setCountdown] = useState(8);
-    const { leaveGame, userId, initSession, fetchGames } = useGameStore();
+export function WinnerPopup({ isOpen, prize, isWinner, winnerName, gameId, calledNumbers = [], countdown, onRedirect }: WinnerPopupProps) {
     const [winners, setWinners] = useState<WinnerInfo[]>([]);
     const [loadingWinners, setLoadingWinners] = useState(false);
+    const { userId, initSession } = useGameStore();
 
     // 1. Refresh balance & fetch all winners when popup opens
     useEffect(() => {
@@ -191,25 +191,7 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName, gameId, calle
         }
     }, [isOpen, gameId, userId]);
 
-    // 2. Countdown timer to return to lobby
-    useEffect(() => {
-        let timer: NodeJS.Timeout;
-        if (isOpen && countdown > 0) {
-            timer = setInterval(() => {
-                setCountdown((prev: number) => prev - 1);
-            }, 1000);
-        } else if (isOpen && countdown === 0) {
-            leaveGame();
-            fetchGames();
-            router.push("/lobby");
-        }
-        return () => clearInterval(timer);
-    }, [isOpen, countdown, router, leaveGame, fetchGames]);
 
-    // Reset countdown when popup re-opens
-    useEffect(() => {
-        if (isOpen) setCountdown(8);
-    }, [isOpen]);
 
     return (
         <Dialog open={isOpen} onOpenChange={() => { }}>
@@ -288,11 +270,7 @@ export function WinnerPopup({ isOpen, prize, isWinner, winnerName, gameId, calle
                     {/* ── Actions ── */}
                     <div className="space-y-2 pt-2">
                         <Button
-                            onClick={() => {
-                                leaveGame();
-                                fetchGames();
-                                router.push("/lobby");
-                            }}
+                            onClick={onRedirect}
                             className={cn(
                                 "w-full h-12 text-white font-black rounded-2xl shadow-xl transition-all active:scale-95 group",
                                 isWinner
