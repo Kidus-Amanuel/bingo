@@ -50,8 +50,9 @@ export async function POST(req: Request) {
         const txnPrefixMatch = message.match(/(?:transaction number is|Txn ID)\s*([A-Za-z0-9]+)/i);
         const txnPrefix = txnPrefixMatch?.[1]?.substring(0, 3).toUpperCase();
 
-        // --- 1. Telebirr Parser (transaction IDs start with DCO) ---
-        if (txnPrefix === 'DCO' || (!txnPrefix && (message.toLowerCase().includes('telebirr') || message.toLowerCase().includes('transferred')))) {
+        // --- 1. Telebirr Parser ---
+        // New IDs start with DCO; fallback to keyword matching for older messages
+        if (txnPrefix === 'DCO' || message.toLowerCase().includes('telebirr') || message.toLowerCase().includes('transferred')) {
             type = 'telebirr';
             const txnMatch = message.match(/transaction number is\s*([A-Za-z0-9]+)/i);
             const amtMatch = message.match(/ETB\s*([\d,\.]+)/i);
@@ -59,8 +60,9 @@ export async function POST(req: Request) {
             if (txnMatch) transactionId = txnMatch[1];
             if (amtMatch) amount = parseFloat(amtMatch[1].replace(/,/g, ''));
         }
-        // --- 2. CBE Birr Parser (transaction IDs start with DCB) ---
-        else if (txnPrefix === 'DCB' || (!txnPrefix && (message.includes('CBE') || message.includes('Txn ID')))) {
+        // --- 2. CBE Birr Parser ---
+        // New IDs start with DCB; fallback to keyword matching for older messages
+        else if (txnPrefix === 'DCB' || message.includes('CBE') || message.includes('Txn ID')) {
             type = 'cbe';
             const txnMatch = message.match(/Txn ID\s*([A-Za-z0-9]+)/i);
             const amtMatch = message.match(/([\d,\.]+)\s*Br/i);
